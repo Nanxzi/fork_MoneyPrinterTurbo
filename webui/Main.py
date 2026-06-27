@@ -57,6 +57,69 @@ song_dir = os.path.join(root_dir, "resource", "songs")
 i18n_dir = os.path.join(root_dir, "webui", "i18n")
 config_file = os.path.join(root_dir, "webui", ".streamlit", "webui.toml")
 system_locale = utils.get_system_locale()
+DEFAULT_CHATTERBOX_BASE_URL = "http://127.0.0.1:4123/v1"
+DEFAULT_CHATTERBOX_MODEL = "chatterbox"
+DEFAULT_CHATTERBOX_VOICES = ["default-Female"]
+
+
+def _parse_chatterbox_voices(voices):
+    # Chatterbox 是自托管服务，音色列表由用户在 WebUI 中手动输入。
+    # 这里统一兼容 TOML 数组和输入框里的逗号分隔字符串，避免下拉框、
+    # 试听按钮和后续生成流程使用不同格式导致状态不一致。
+    if isinstance(voices, str):
+        return [v.strip() for v in voices.split(",") if v.strip()]
+    return [str(v).strip() for v in voices or [] if str(v).strip()]
+
+
+def _sync_chatterbox_config_from_session_state():
+    # Streamlit 的按钮会触发整页 rerun，而 Chatterbox 配置输入框位于
+    # “试听语音合成”按钮之后。如果试听时只读取 config.chatterbox，可能拿不到
+    # 用户刚在输入框里填入的 base_url/model/voices。先从 session_state 同步一次，
+    # 可以保证按钮逻辑和输入框显示逻辑使用同一份最新配置。
+    config.chatterbox["base_url"] = (
+        st.session_state.get(
+            "chatterbox_base_url_input",
+            config.chatterbox.get("base_url") or DEFAULT_CHATTERBOX_BASE_URL,
+        )
+        or ""
+    ).strip()
+    config.chatterbox["api_key"] = st.session_state.get(
+        "chatterbox_api_key_input", config.chatterbox.get("api_key", "")
+    )
+    config.chatterbox["model_id"] = (
+        st.session_state.get(
+            "chatterbox_model_input",
+            config.chatterbox.get("model_id") or DEFAULT_CHATTERBOX_MODEL,
+        )
+        or DEFAULT_CHATTERBOX_MODEL
+    ).strip()
+    config.chatterbox["voices"] = _parse_chatterbox_voices(
+        st.session_state.get(
+            "chatterbox_voices_input",
+            config.chatterbox.get("voices") or DEFAULT_CHATTERBOX_VOICES,
+        )
+    )
+
+
+def _detect_audio_mime(audio_file: str, audio_bytes: bytes) -> str:
+    # 有些 OpenAI-compatible TTS 服务，例如 travisvn/chatterbox-tts-api，
+    # 即使请求 response_format=mp3，也会返回 WAV 内容。WebUI 试听如果固定
+    # 使用 audio/mp3，浏览器可能无法播放，因此这里按文件头识别真实格式。
+    header = audio_bytes[:12]
+    if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
+        return "audio/wav"
+    if header.startswith(b"ID3") or header[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "audio/mp3"
+    if header.startswith(b"OggS"):
+        return "audio/ogg"
+    ext = os.path.splitext(audio_file)[1].lower()
+    return {
+        ".wav": "audio/wav",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".ogg": "audio/ogg",
+        ".flac": "audio/flac",
+    }.get(ext, "audio/mp3")
 
 
 if "video_subject" not in st.session_state:
@@ -964,6 +1027,7 @@ with middle_panel:
             ("gemini-tts", "Google Gemini TTS"),
             ("mimo-tts", "Xiaomi MiMo TTS"),
             ("elevenlabs", "ElevenLabs TTS"),
+            ("chatterbox", "Chatterbox TTS"),
         ]
 
         # 获取保存的TTS服务器，默认为v1
@@ -1016,6 +1080,10 @@ with middle_panel:
                     saved_elevenlabs_api_key
                 )
             filtered_voices = st.session_state[cache_key]
+        elif selected_tts_server == "chatterbox":
+            # 自托管 Chatterbox 服务的预置音色（来自 [chatterbox] voices 配置）
+            _sync_chatterbox_config_from_session_state()
+            filtered_voices = voice.get_chatterbox_voices()
         else:
             # 获取Azure的声音列表
             all_voices = voice.get_all_azure_voices(filter_locals=None)
@@ -1038,6 +1106,9 @@ with middle_panel:
                 if voice.is_elevenlabs_voice(v):
                     parts = v.split(":", 2)
                     return parts[2] if len(parts) >= 3 else v
+                if voice.is_chatterbox_voice(v):
+                    name = v.split(":", 1)[1] if ":" in v else v
+                    return name.replace("-Female", "").replace("-Male", "")
                 return (
                     v.replace("Female", tr("Female"))
                     .replace("Male", tr("Male"))
@@ -1094,6 +1165,8 @@ with middle_panel:
             and selected_tts_server != voice.NO_VOICE_NAME
             and st.button(tr("Play Voice"))
         ):
+            if selected_tts_server == "chatterbox":
+                _sync_chatterbox_config_from_session_state()
             play_content = params.video_subject
             if not play_content:
                 play_content = params.video_script
@@ -1132,7 +1205,15 @@ with middle_panel:
                     )
 
                 if sub_maker and os.path.exists(audio_file):
-                    st.audio(audio_file, format="audio/mp3")
+                    with open(audio_file, "rb") as f:
+                        audio_bytes = f.read()
+                    if audio_bytes:
+                        st.audio(
+                            audio_bytes,
+                            format=_detect_audio_mime(audio_file, audio_bytes),
+                        )
+                    else:
+                        logger.error(f"voice preview audio file is empty: {audio_file}")
                     if os.path.exists(audio_file):
                         os.remove(audio_file)
 
@@ -1251,6 +1332,61 @@ with middle_panel:
                         del st.session_state[k]
 
             config.elevenlabs["api_key"] = elevenlabs_api_key
+
+        # Chatterbox API settings section (self-hosted, OpenAI-compatible)
+        if selected_tts_server == "chatterbox" or (
+            voice_name and voice.is_chatterbox_voice(voice_name)
+        ):
+            chatterbox_base_url = st.text_input(
+                tr("Chatterbox Base URL"),
+                value=config.chatterbox.get("base_url") or DEFAULT_CHATTERBOX_BASE_URL,
+                key="chatterbox_base_url_input",
+                placeholder="http://localhost:4123/v1",
+            )
+            config.chatterbox["base_url"] = (chatterbox_base_url or "").strip()
+
+            chatterbox_api_key = st.text_input(
+                tr("Chatterbox API Key"),
+                value=config.chatterbox.get("api_key", ""),
+                type="password",
+                key="chatterbox_api_key_input",
+            )
+            config.chatterbox["api_key"] = chatterbox_api_key
+
+            chatterbox_model = st.text_input(
+                tr("Chatterbox Model"),
+                value=config.chatterbox.get("model_id") or DEFAULT_CHATTERBOX_MODEL,
+                key="chatterbox_model_input",
+            )
+            config.chatterbox["model_id"] = (
+                chatterbox_model or DEFAULT_CHATTERBOX_MODEL
+            ).strip()
+
+            _saved_chatterbox_voices = (
+                _parse_chatterbox_voices(config.chatterbox.get("voices"))
+                or DEFAULT_CHATTERBOX_VOICES
+            )
+            if isinstance(_saved_chatterbox_voices, list):
+                _saved_chatterbox_voices = ", ".join(_saved_chatterbox_voices)
+            chatterbox_voices = st.text_input(
+                tr("Chatterbox Voices"),
+                value=str(_saved_chatterbox_voices or ""),
+                key="chatterbox_voices_input",
+                placeholder="default-Female, narrator-Male",
+            )
+            config.chatterbox["voices"] = _parse_chatterbox_voices(chatterbox_voices)
+
+            st.info(
+                "Chatterbox TTS Settings (self-hosted):\n"
+                "- Run an OpenAI-compatible Chatterbox server (e.g. "
+                "devnen/Chatterbox-TTS-Server or travisvn/chatterbox-tts-api) and "
+                "set Base URL to its /v1 endpoint\n"
+                "- Voices is a comma-separated list of voice names your server "
+                "exposes; add a -Female or -Male suffix only to label the gender "
+                "in this dropdown\n"
+                "- Speech Volume is not applied for Chatterbox (the OpenAI "
+                "/audio/speech API has no volume field); use Speech Rate instead"
+            )
 
         params.voice_volume = st.selectbox(
             tr("Speech Volume"),
