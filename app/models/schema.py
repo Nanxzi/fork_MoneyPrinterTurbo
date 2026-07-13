@@ -27,6 +27,8 @@ class VideoTransitionMode(str, Enum):
     fade_out = "FadeOut"
     slide_in = "SlideIn"
     slide_out = "SlideOut"
+    zoom_in = "ZoomIn"
+    zoom_out = "ZoomOut"
 
 
 class VideoAspect(str, Enum):
@@ -77,6 +79,7 @@ class VideoParams(BaseModel):
     video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = 5
+    video_clip_speed: Optional[float] = 1.0
     match_materials_to_script: bool = False
     video_count: Optional[int] = 1
 
@@ -100,7 +103,7 @@ class VideoParams(BaseModel):
     custom_position: float = config.ui.get("custom_position", 70.0)
     font_name: Optional[str] = "STHeitiMedium.ttc"
     text_fore_color: Optional[str] = "#FFFFFF"
-    text_background_color: Union[bool, str] = True
+    text_background_color: Union[bool, str] = False
     rounded_subtitle_background: bool = False
 
     font_size: int = 60
@@ -124,7 +127,7 @@ class SubtitleRequest(BaseModel):
     subtitle_position: Optional[str] = config.ui.get("subtitle_position", "bottom")
     font_name: Optional[str] = "STHeitiMedium.ttc"
     text_fore_color: Optional[str] = "#FFFFFF"
-    text_background_color: Union[bool, str] = True
+    text_background_color: Union[bool, str] = False
     rounded_subtitle_background: bool = False
     font_size: int = 60
     stroke_color: Optional[str] = "#000000"
