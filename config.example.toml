@@ -64,6 +64,14 @@ twelvelabs_rerank_terms = false
 # 默认关闭，开启后会减少随机性，使素材顺序更贴近文案结构。
 match_materials_to_script = false
 
+# Optional Sonilo video-matched original background music.
+# Create a key at https://platform.sonilo.com/dashboard. The WebUI can also save
+# this value, or you can set the SONILO_API_KEY environment variable instead.
+sonilo_api_key = ""
+sonilo_base_url = "https://api.sonilo.com"
+# 单次生成流连续无数据时的最长等待秒数；它不是整个请求的总耗时上限。
+sonilo_timeout = 600
+
 # -----------------------------------------------------------------------------
 # LLM Providers / 大模型提供商
 # -----------------------------------------------------------------------------
@@ -201,7 +209,9 @@ pollinations_model_name = ""
 mimo_tts_model_name = "mimo-v2.5-tts"
 mimo_tts_style_prompt = "请用自然、清晰、适合短视频旁白的语气朗读。"
 
-# Subtitle provider: "edge" or "whisper". Leave empty to skip generation.
+# Subtitle provider: "edge" or "whisper". Whisper is loaded only when selected
+# explicitly; Edge failures do not trigger an automatic Whisper model download.
+# Leave empty to skip generation.
 subtitle_provider = "edge"
 
 # FFmpeg is normally downloaded and detected automatically. If detection fails,
@@ -256,6 +266,11 @@ upload_post_platforms = ["tiktok", "instagram"]
 upload_post_auto_upload = false
 # YouTube privacy: "public", "unlisted", or "private".
 upload_post_youtube_privacy_status = "public"
+# Maximum number of running and queued cross-post jobs per process. When the
+# limit is reached, video generation still succeeds and only cross-posting is
+# rejected.
+# Cross-post jobs run in the current process and are not resumed after restart.
+upload_post_max_pending_tasks = 10
 
 # =============================================================================
 # Whisper Subtitles / Whisper 字幕

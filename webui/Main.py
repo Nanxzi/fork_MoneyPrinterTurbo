@@ -40,6 +40,7 @@ from app.models.schema import (
 )
 from app.services import bgm as bgm_service
 from app.services import cache_manager, llm, video, voice
+from app.services import sonilo as sonilo_service
 from app.services import state as sm
 from app.services import task as tm
 from app.utils import utils
@@ -209,6 +210,13 @@ def _build_uploaded_file_path(uploaded_file, target_dir, allowed_extensions, pre
 
 def _initialize_session_state():
     """集中初始化跨 rerun 保留的页面状态。"""
+    if not st.session_state.get("cross_post_recovery_checked"):
+        # WebUI 可以不经过 FastAPI 独立运行，因此也需要在首次会话初始化时处理
+        # 进程重启留下的发布状态。恢复失败时不写标记，后续 rerun 会再次尝试。
+        recovered = tm.recover_interrupted_cross_posts()
+        if recovered is not None:
+            st.session_state["cross_post_recovery_checked"] = True
+
     saved_ui_language = config.ui.get("language", "")
     browser_locale = st.context.locale
     initial_ui_language = utils.resolve_ui_language(
@@ -532,6 +540,7 @@ def _collect_task_summaries(limit=20):
             "task_id": task_id,
             "subject": subject,
             "state": task.get("state"),
+            "cross_post_state": task.get("cross_post_state"),
             "progress": int(task.get("progress", 0) or 0),
             "mtime": os.path.getmtime(task_path)
             if os.path.isdir(task_path)
@@ -609,15 +618,12 @@ def _delete_task(task_id, task_path, task_state=None):
         logger.exception(f"failed to verify task state before deletion: {task_id}, {e}")
         return False
 
-    current_state = current_task.get("state") if current_task else None
-    is_processing = (
-        any(
-            _normalize_task_state(state) == const.TASK_STATE_PROCESSING
-            for state in (task_state, current_state)
-        )
-        or task_id in _active_generation_tasks()
-    )
-    if is_processing:
+    task_snapshot = dict(current_task or {})
+    task_snapshot.setdefault("state", task_state)
+    if task_id in _active_generation_tasks():
+        task_snapshot["state"] = const.TASK_STATE_PROCESSING
+
+    if tm.is_task_busy(task_snapshot):
         logger.warning(f"refused to delete running task: {task_id}")
         return False
 
@@ -680,6 +686,7 @@ def _render_task_table(filtered_tasks, key_prefix):
             task_id = task["task_id"]
             has_video = bool(task["video_file"] and os.path.isfile(task["video_file"]))
             is_processing = _task_state_filter_key(task) == "processing"
+            is_busy = is_processing or tm.is_task_busy(task)
             has_restore_data = os.path.isfile(
                 os.path.join(task["task_path"], "script.json")
             )
@@ -744,7 +751,7 @@ def _render_task_table(filtered_tasks, key_prefix):
                     delete_label = tr("Delete Task")
                     delete_help = (
                         f"{delete_label} ({tr('Task Status Processing')})"
-                        if is_processing
+                        if is_busy
                         else delete_label
                     )
                     if st.button(
@@ -753,7 +760,7 @@ def _render_task_table(filtered_tasks, key_prefix):
                         use_container_width=True,
                         icon=":material/delete:",
                         help=delete_help,
-                        disabled=is_processing,
+                        disabled=is_busy,
                     ):
                         if _delete_task(task_id, task["task_path"], task["state"]):
                             st.toast(tr("Task Deleted"))
@@ -940,6 +947,9 @@ def _apply_pending_task_restore():
     _set_stable_widget_value("bgm_type_select", bgm_type)
     _set_stable_widget_value("bgm_volume_select", params.get("bgm_volume", 0.2))
     st.session_state["custom_bgm_file_input"] = params.get("bgm_file") or ""
+    st.session_state["sonilo_bgm_prompt_input"] = (
+        params.get("sonilo_bgm_prompt") or ""
+    )
 
     # 字幕设置。对旧任务中的越界数值做最小限幅，避免 Slider 无法初始化。
     st.session_state["subtitle_enabled_checkbox"] = bool(
@@ -2336,6 +2346,7 @@ def _render_background_music_settings(params):
         (tr("No Background Music"), ""),
         (tr("Random Background Music"), "random"),
         (tr("Custom Background Music"), "custom"),
+        (tr("Sonilo Background Music"), "sonilo"),
     ]
     selected_bgm_type = stable_selectbox(
         tr("Background Music Source"),
@@ -2345,6 +2356,17 @@ def _render_background_music_settings(params):
         format_func=lambda value: dict((v, label) for label, v in bgm_options)[value],
     )
     params.bgm_type = selected_bgm_type
+    params.bgm_volume = stable_selectbox(
+        tr("Background Music Volume"),
+        options=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        default_value=0.2,
+        key="bgm_volume_select",
+        format_func=lambda value: f"{int(value * 100)}%",
+        disabled=not params.bgm_type,
+    )
+    bgm_enabled = bgm_service.should_use_bgm(
+        params.bgm_type, params.bgm_volume
+    )
 
     if params.bgm_type == "custom":
         uploaded_bgm_file = st.file_uploader(
@@ -2360,7 +2382,7 @@ def _render_background_music_settings(params):
             # 30MB 硬限制保持一致，避免界面允许选择、提交时才被服务端拒绝。
             max_upload_size=bgm_service.MAX_BGM_UPLOAD_BYTES // (1024 * 1024),
         )
-        if uploaded_bgm_file is not None:
+        if uploaded_bgm_file is not None and bgm_enabled:
             try:
                 safe_name = bgm_service.sanitize_upload_filename(
                     uploaded_bgm_file.name
@@ -2418,7 +2440,7 @@ def _render_background_music_settings(params):
                             cached_validation["error"]
                         )
                     raise bgm_service.BgmUploadError(cached_validation["error"])
-            except bgm_service.BgmUploadError as exc:
+            except bgm_service.BgmUploadError:
                 # 非法文件不能沿用上一次有效上传的名称，否则任务参数可能仍指向
                 # 历史 BGM。保留 UploadedFile 返回值，让用户点击生成时仍会被最终
                 # 服务端校验拦截，而不是静默生成一条没有背景音乐的视频。
@@ -2447,18 +2469,59 @@ def _render_background_music_settings(params):
             key="custom_bgm_file_input",
             disabled=uploaded_bgm_file is not None,
         )
-        if uploaded_bgm_file is None and custom_bgm_file:
+        if uploaded_bgm_file is None and custom_bgm_file and bgm_enabled:
             # 文件名由服务层映射到 storage/bgm 或 resource/songs 后校验，
             # UI 不接受两个白名单目录之外的任意路径。
             params.bgm_file = custom_bgm_file.strip()
-    params.bgm_volume = stable_selectbox(
-        tr("Background Music Volume"),
-        options=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-        default_value=0.2,
-        key="bgm_volume_select",
-        format_func=lambda value: f"{int(value * 100)}%",
-        disabled=not params.bgm_type,
-    )
+        elif not bgm_enabled:
+            # 上传控件继续保留用户已选择的文件，调高音量后的下一次 rerun 会自动
+            # 完整校验；当前任务参数必须清空，避免 0 音量任务保存或解析该文件。
+            params.bgm_file = ""
+
+    if params.bgm_type == "sonilo":
+        configured_key = str(config.app.get("sonilo_api_key", "") or "").strip()
+        effective_key = configured_key or os.getenv("SONILO_API_KEY", "").strip()
+        entered_key = st.text_input(
+            tr("Sonilo API Key"),
+            value=effective_key,
+            type="password",
+            key="sonilo_api_key_input",
+            help=tr("Sonilo API Key Help"),
+        ).strip()
+        # 用户要求已配置的 Key 直接回填到密码输入框。配置值优先于环境变量；
+        # 仅当用户确实修改输入或本来就使用配置时写回，避免把环境变量中的 Key
+        # 在无操作的情况下复制进 config.toml。
+        if configured_key or entered_key != effective_key:
+            config.app["sonilo_api_key"] = entered_key
+
+        params.sonilo_bgm_prompt = st.text_input(
+            tr("Sonilo Music Prompt"),
+            key="sonilo_bgm_prompt_input",
+            max_chars=sonilo_service.MAX_PROMPT_LENGTH,
+            help=tr("Sonilo Music Prompt Help"),
+        ).strip()
+        if params.video_count > 1:
+            st.warning(tr("Sonilo Multiple Videos Warning"))
+        if st.button(
+            tr("Test Sonilo Connection"),
+            key="test_sonilo_connection_button",
+            use_container_width=True,
+        ):
+            try:
+                sonilo_service.test_connection()
+            except sonilo_service.SoniloError as exc:
+                logger.warning(f"Sonilo connection test failed: {exc}")
+                st.error(tr("Sonilo Connection Test Failed").format(error=str(exc)))
+            else:
+                st.success(tr("Sonilo Connection Test Succeeded"))
+    if (
+        params.bgm_type == "sonilo"
+        and bgm_enabled
+        and not sonilo_service.is_enabled()
+    ):
+        # 音量为 0 时任务层不会生成或混合 Sonilo 配乐，因此无需提示 Key；
+        # 该判断与任务入口共用服务层规则，避免界面提示和实际执行条件分叉。
+        st.warning(tr("Sonilo API Key Required"))
     return uploaded_bgm_file
 
 
@@ -3178,6 +3241,15 @@ def _render_generation_controls(
             st.error(tr("Please Enter the Coverr API Key"))
             st.stop()
 
+        if (
+            params.bgm_type == "sonilo"
+            and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
+            and not sonilo_service.is_enabled()
+        ):
+            _remove_active_generation_task(task_id)
+            st.error(tr("Sonilo API Key Required"))
+            st.stop()
+
         if params.video_source == "local" and not has_local_materials:
             # 本地素材为空时继续执行会先产生 TTS/字幕，最后才在素材预处理阶段失败。
             # 在任务启动前拦截，可以避免无意义的 API 调用和中间文件。
@@ -3199,7 +3271,9 @@ def _render_generation_controls(
             st.error(tr("Task Restore Custom Audio Warning"))
             st.stop()
 
-        if uploaded_bgm_file:
+        if uploaded_bgm_file and bgm_service.should_use_bgm(
+            params.bgm_type, params.bgm_volume
+        ):
             try:
                 saved_bgm_name = bgm_service.save_bgm_upload(
                     uploaded_bgm_file.name, uploaded_bgm_file
@@ -3217,6 +3291,10 @@ def _render_generation_controls(
             # 保存成功后只把文件名写入任务参数。视频服务会在两个 BGM 白名单
             # 目录中重新解析，避免把服务器绝对路径持久化或展示给用户。
             params.bgm_file = saved_bgm_name
+        elif uploaded_bgm_file:
+            # 0 音量时视频服务不会使用任何 BGM，因此不再把已经预览的上传文件
+            # 持久化到 storage。用户之后调高音量时可直接再次点击生成完成保存。
+            params.bgm_file = ""
 
         if uploaded_audio_file:
             task_dir = utils.task_dir(task_id)
@@ -3306,6 +3384,18 @@ def _render_generation_controls(
 
             video_files = result.get("videos", [])
             st.success(tr("Video Generation Completed"))
+            for warning in result.get("warnings") or []:
+                if (
+                    isinstance(warning, Mapping)
+                    and warning.get("code") == "sonilo_bgm_failed"
+                ):
+                    st.warning(
+                        tr("Sonilo BGM Fallback Warning").format(
+                            index=warning.get("video_index", "")
+                        )
+                    )
+                else:
+                    st.warning(str(warning))
             try:
                 if video_files:
                     player_cols = st.columns(len(video_files) * 2 + 1)
