@@ -62,6 +62,7 @@
     "Task Actions": "Azioni",
     "Play Video": "Riproduci",
     "Play": "Riproduci",
+    "Close": "Chiudi",
     "Open": "Apri",
     "Delete": "Elimina",
     "Delete Task": "Elimina attività",
@@ -321,6 +322,16 @@
     "Confirm WaveSpeed Charge Required": "Conferma il costo della generazione video con WaveSpeed prima di generare il video.",
     "Video Encoder": "Codificatore video",
     "Default Video Encoder": "Predefinito (consigliato)",
-    "Video Encoder Help": "Opzione avanzata. Il valore predefinito segue la politica di codifica stabile dell'applicazione, attualmente libx264. Se un codificatore hardware selezionato non è disponibile, l'applicazione torna automaticamente a libx264."
+    "Video Encoder Help": "Opzione avanzata. Il valore predefinito segue la politica di codifica stabile dell'applicazione, attualmente libx264. Se un codificatore hardware selezionato non è disponibile, l'applicazione torna automaticamente a libx264.",
+    "Auto-Publish Settings": "Impostazioni di pubblicazione automatica",
+    "Automatically publish generated videos to social media using upload-post.com": "Pubblica automaticamente i video generati sui social media usando upload-post.com",
+    "Enable Auto-Publish": "Abilita pubblicazione automatica",
+    "Platforms": "Piattaforme",
+    "Upload-Post API Key": "Chiave API Upload-Post",
+    "Upload-Post API Key Help": "Crea e copia una chiave API dalla pagina [Upload-Post API Keys]({api_keys_url}).",
+    "Upload-Post Profile Username": "Nome utente del profilo Upload-Post",
+    "Upload-Post Profile Username Help": "Inserisci il nome utente mostrato in [Manage Users]({manage_users_url}), non l'email del tuo account Upload-Post. Questo utente di pubblicazione deve essere collegato alle piattaforme selezionate.",
+    "Upload-Post Setup Guide": "Prima di abilitare la pubblicazione automatica:\n1. Crea una chiave API in [API Keys]({api_keys_url}).\n2. Crea o seleziona un utente di pubblicazione in [Manage Users]({manage_users_url}), quindi collega le piattaforme di destinazione.\n\nInserisci qui sotto il suo **nome utente**, non l'email del tuo account Upload-Post.",
+    "YouTube Privacy Status": "Stato di privacy di YouTube"
   }
 }
