@@ -62,15 +62,15 @@
   </tr>
   <tr>
     <td align="center" width="120">
-      <a href="https://infistar.ai/register?aff=6T4EYXP2&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar.ai 无限星河" height="56"></a><br>
-      <a href="https://infistar.ai/register?aff=6T4EYXP2&amp;ref_source=link"><strong>Infistar.ai 无限星河</strong></a>
+      <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar.ai 无限星河" height="56"></a><br>
+      <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><strong>Infistar.ai 无限星河</strong></a>
     </td>
     <td align="left">
-      感谢 <a href="https://infistar.ai/register?aff=6T4EYXP2&amp;ref_source=link">Infistar.ai 无限星河</a> 赞助本项目！<br>
+      感谢 <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link">Infistar.ai 无限星河</a> 赞助本项目！<br>
       ⚡ 超低成本与稳定调度：价格低至官方 1 折，模型倍率与调用明细全程透明；多路供应动态调度，告别限流与断连困扰。<br>
       🧠 全系大模型完美驱动脚本：全面覆盖 OpenAI、Claude、Google Gemini、DeepSeek、通义千问（Qwen）等主流 LLM，兼容 OpenAI 标准接口，为 MoneyPrinterTurbo 的文案生成与素材关键词提炼提供低延迟、高并发支持。<br>
       🎨 前沿多模态生态：全面接入 FLUX、Midjourney、Seedance、可灵（Kling）、Sora、Luma 等顶级生图与视频模型，满足下一代 AI 视频生成需求。<br>
-      🎁 MoneyPrinterTurbo 用户专属福利：通过 <a href="https://infistar.ai/register?aff=6T4EYXP2&amp;ref_source=link">专属推广链接</a> 注册即享 [专属赠送额度 / 首充特惠]，开箱即用！
+      🎁 MoneyPrinterTurbo 用户专属福利：通过 <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link">专属推广链接</a> 注册即享 [专属赠送额度 / 首充特惠]，开箱即用！
     </td>
   </tr>
   <tr>
@@ -368,6 +368,17 @@ uv run python cli.py --video-subject "人工智能如何改变日常生活"
 ```shell
 uv run python cli.py --help
 ```
+
+如需顺序执行多个任务，可通过 `--batch-file` 提供 UTF-8 JSON 数组或 JSONL
+清单。CLI 参数作为全局默认值，每个对象可覆盖 `VideoParams` 字段：
+
+```shell
+uv run python cli.py --batch-file ./tasks.json --stop-at video
+```
+
+清单最多包含 100 个任务且不超过 1 MiB。所有条目会在第一个任务启动前完成
+参数与本地文件预检；单个任务运行失败不会阻止后续条目，结束后会输出统一的
+JSON 汇总。清单中的相对自定义音频与本地素材路径以清单目录为基准。
 
 ## 语音合成 🗣
 
