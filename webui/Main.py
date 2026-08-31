@@ -39,6 +39,7 @@ from app.models.schema import (
     MaterialInfo,
     VideoAspect,
     VideoConcatMode,
+    VideoFitMode,
     VideoParams,
     VideoTransitionMode,
 )
@@ -137,6 +138,21 @@ _FINAL_VIDEO_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _DOWNLOAD_FILENAME_INVALID_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WINDOWS_RESERVED_FILENAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {
+        f"{prefix}{number}"
+        for prefix in ("COM", "LPT")
+        for number in range(1, 10)
+    }
+    # Win32 还会把 Latin-1 上标数字 ¹、²、³ 识别为设备编号。虽然这类主题
+    # 很少见，但仍会导致 Windows 下载失败，因此与普通数字保留名统一处理。
+    | {
+        f"{prefix}{number}"
+        for prefix in ("COM", "LPT")
+        for number in ("¹", "²", "³")
+    }
+)
 _RUNTIME_CONFIG_SECTIONS = {
     "app": config.app,
     "azure": config.azure,
@@ -989,6 +1005,11 @@ def _build_video_download_name(subject, index, total):
     safe_subject = re.sub(r"\s+", " ", safe_subject).strip(" .")[:80].rstrip(" .")
     if not safe_subject:
         safe_subject = "video"
+    # Win32 在识别设备名时会忽略扩展名前的尾随空格和句点。与背景音乐上传
+    # 的现有规则保持一致，避免 ``CON .topic`` 绕过保留名保护。
+    windows_basename = safe_subject.split(".", 1)[0].rstrip(" .").upper()
+    if windows_basename in _WINDOWS_RESERVED_FILENAMES:
+        safe_subject = f"_{safe_subject}"
 
     suffix = f"-{index}" if total > 1 else ""
     return f"{safe_subject}{suffix}.mp4"
@@ -1288,6 +1309,10 @@ def _apply_restored_params(params):
     _set_stable_widget_value(
         f"video_aspect_for_{video_source}",
         params.get("video_aspect") or VideoAspect.portrait.value,
+    )
+    _set_stable_widget_value(
+        "video_fit_mode_select",
+        params.get("video_fit_mode") or VideoFitMode.cover.value,
     )
     _set_stable_widget_value(
         "video_clip_duration_select", params.get("video_clip_duration", 3)
@@ -3949,6 +3974,29 @@ def _render_video_settings(panel, params):
             params.video_aspect = VideoAspect(selected_aspect_ratio)
             _set_runtime_config(
                 "ui", video_aspect_config_key, params.video_aspect.value
+            )
+
+            video_fit_modes = [
+                (tr("Fill and Crop"), VideoFitMode.cover.value),
+                (tr("Fit with Black Bars"), VideoFitMode.contain.value),
+            ]
+            selected_fit_mode = stable_selectbox(
+                tr("Video Fit Mode"),
+                options=[value for _, value in video_fit_modes],
+                default_value=_saved_ui_choice(
+                    "video_fit_mode",
+                    [value for _, value in video_fit_modes],
+                    VideoFitMode.cover.value,
+                ),
+                key="video_fit_mode_select",
+                format_func=lambda value: dict(
+                    (v, label) for label, v in video_fit_modes
+                )[value],
+                help=tr("Video Fit Mode Help"),
+            )
+            params.video_fit_mode = VideoFitMode(selected_fit_mode)
+            _set_runtime_config(
+                "ui", "video_fit_mode", params.video_fit_mode.value
             )
 
             video_clip_durations = [2, 3, 4, 5, 6, 7, 8, 9, 10]

@@ -104,22 +104,22 @@
 ## 作者によるもう 1 つのオープンソースプロジェクト: MangoDisk ⭐
 
 <p align="center">
-  <a href="https://github.com/harry0703/MangoDisk">
+  <a href="https://mangodisk.app/ja">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/readme/en-dark.jpg">
-      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/readme/en-light.jpg">
-      <img src="https://assets.mangodisk.app/images/readme/en-light.jpg" width="900" alt="MangoDisk open-source disk cleaner and disk space analyzer">
+      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/ja/dark-01-deep-cleanup.jpg">
+      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/ja/light-01-deep-cleanup.jpg">
+      <img src="https://assets.mangodisk.app/images/screenshots/ja/light-01-deep-cleanup.jpg" width="900" alt="MangoDisk ディープクリーン画面">
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <strong>安全性を最優先に設計された、macOS と Windows 向けのオープンソースのディスククリーナー兼ディスク容量アナライザー</strong><br>
-  大きなファイルや重複ファイルを見つけ、キャッシュやアプリの残骸を削除して、安全にディスク容量を取り戻せます。
+  <strong>macOS・Windows 向けのオープンソースのディスククリーンアップ、容量分析、システム最適化ツール</strong><br>
+  キャッシュ、大容量ファイル、重複ファイル、アプリの残骸を整理し、容量分析、アプリのアンインストール、スタートアップ管理、システム最適化・メンテナンスにも対応します。
 </p>
 
 <p align="center">
-  <a href="https://github.com/harry0703/MangoDisk">オープンソースプロジェクトを見る</a>
+  <a href="https://mangodisk.app/ja">MangoDisk 公式サイト</a> · <a href="https://github.com/harry0703/MangoDisk">GitHub で見る</a>
 </p>
 
 ---
@@ -277,6 +277,8 @@ docker compose -f docker-compose.release.yml up
 #### ③ API ドキュメントにアクセスする
 
 ブラウザーで http://127.0.0.1:8080/docs または http://127.0.0.1:8080/redoc を開きます
+
+> API はデフォルトで同一オリジンのブラウザーアクセスのみを許可します。別のブラウザーフロントエンドから API を直接呼び出す場合に限り、環境変数 `CORS_ALLOWED_ORIGINS` へ信頼するオリジンを設定してください（例: `http://localhost:3000,https://frontend.example.com`）。curl、Postman、n8n、その他のサーバー側クライアントは CORS の影響を受けません。
 
 ### 手動でデプロイ 📦
 
