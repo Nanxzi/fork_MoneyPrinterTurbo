@@ -132,6 +132,8 @@ DEFAULT_SUBTITLE_SETTINGS = {
     "subtitle_enabled": True,
     "font_name": "MicrosoftYaHeiBold.ttc",
     "subtitle_position": "bottom",
+    "subtitle_display_mode": "sentence",
+    "subtitle_animation": "none",
     "custom_position": 70.0,
     "text_fore_color": "#FFFFFF",
     "font_size": 60,
@@ -1383,6 +1385,12 @@ def _apply_restored_params(params):
     _set_stable_widget_value(
         "subtitle_position_select", params.get("subtitle_position") or "bottom"
     )
+    _set_stable_widget_value(
+        "subtitle_display_mode_select", params.get("subtitle_display_mode") or "sentence"
+    )
+    _set_stable_widget_value(
+        "subtitle_animation_select", params.get("subtitle_animation") or "none"
+    )
     custom_position = min(100.0, max(0.0, float(params.get("custom_position", 70.0))))
     st.session_state["custom_position_input"] = str(custom_position)
     st.session_state["font_color_picker"] = params.get("text_fore_color") or "#FFFFFF"
@@ -2283,6 +2291,12 @@ def reset_subtitle_settings():
     st.session_state["subtitle_enabled_checkbox"] = defaults["subtitle_enabled"]
     _set_stable_widget_value("font_name_select", defaults["font_name"])
     _set_stable_widget_value("subtitle_position_select", defaults["subtitle_position"])
+    _set_stable_widget_value(
+        "subtitle_display_mode_select", defaults["subtitle_display_mode"]
+    )
+    _set_stable_widget_value(
+        "subtitle_animation_select", defaults["subtitle_animation"]
+    )
     st.session_state["custom_position_input"] = str(defaults["custom_position"])
     st.session_state["font_color_picker"] = defaults["text_fore_color"]
     st.session_state["font_size_slider"] = defaults["font_size"]
@@ -2303,6 +2317,8 @@ def reset_subtitle_settings():
         "subtitle_enabled",
         "font_name",
         "subtitle_position",
+        "subtitle_display_mode",
+        "subtitle_animation",
         "custom_position",
         "text_fore_color",
         "font_size",
@@ -2312,7 +2328,8 @@ def reset_subtitle_settings():
         "subtitle_background_color",
         "rounded_subtitle_background",
     ):
-        _set_runtime_config("ui", key, defaults[key])
+        if key in defaults:
+            _set_runtime_config("ui", key, defaults[key])
 
 
 @st.dialog(tr("Final Prompt Preview"), width="large")
@@ -5426,6 +5443,7 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
     bgm_options = [
         (tr("No Background Music"), ""),
         (tr("Random Background Music"), "random"),
+        (tr("Preset Song"), "preset"),
         (tr("Custom Background Music"), "custom"),
         (tr("Sonilo Background Music"), "sonilo"),
         (tr("ElevenLabs Background Music"), "elevenlabs"),
@@ -5591,6 +5609,25 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             # 完整校验；当前任务参数必须清空，避免 0 音量任务保存或解析该文件。
             params.bgm_file = ""
 
+    if params.bgm_type == "preset":
+        available_songs = bgm_service.list_bgm_filenames()
+        if not available_songs:
+            st.warning(tr("No Background Music Available") if "No Background Music Available" in st.session_state else "No songs found in resource/songs.")
+            params.bgm_file = ""
+        else:
+            default_preset_song = _saved_ui_text("preset_song", available_songs[0])
+            selected_song = stable_selectbox(
+                tr("Preset Song"),
+                options=available_songs,
+                default_value=default_preset_song if default_preset_song in available_songs else available_songs[0],
+                key="preset_song_select",
+            )
+            _set_runtime_config("ui", "preset_song", selected_song)
+            if bgm_enabled:
+                params.bgm_file = selected_song
+            else:
+                params.bgm_file = ""
+
     if params.bgm_type == "sonilo":
         if previous_bgm_type != "sonilo":
             st.session_state["sonilo_bgm_prompt_input"] = _saved_ui_text(
@@ -5705,7 +5742,7 @@ def _render_audio_settings(panel, params):
             # Provider 下拉只负责选择自动配音服务；无配音已经由上方模式控制，
             # 不再作为 TTS Provider 混入列表，避免两个入口表达同一状态。
             tts_servers = [
-                ("azure-tts-v1", "Azure TTS V1"),
+                ("azure-tts-v1", "Azure TTS V1 (Edge TTS)"),
                 ("azure-tts-v2", "Azure TTS V2"),
                 ("siliconflow", "SiliconFlow TTS"),
                 ("gemini-tts", "Google Gemini TTS"),
@@ -6213,6 +6250,7 @@ def _render_subtitle_settings(panel, params):
                 (tr("Top"), "top"),
                 (tr("Center"), "center"),
                 (tr("Bottom"), "bottom"),
+                (tr("2/3 from Bottom"), "two_thirds_bottom"),
                 (tr("Custom"), "custom"),
             ]
             saved_subtitle_position = config.ui.get(
@@ -6230,11 +6268,70 @@ def _render_subtitle_settings(panel, params):
                 key="subtitle_position_select",
                 format_func=lambda value: dict(
                     (v, label) for label, v in subtitle_positions
-                )[value],
+                ).get(value, value),
                 disabled=subtitle_settings_disabled,
             )
             params.subtitle_position = selected_subtitle_position
             _set_runtime_config("ui", "subtitle_position", params.subtitle_position)
+
+            # Subtitle Display Mode (Sentence vs Single Word)
+            subtitle_display_modes = [
+                (tr("Sentence by Sentence"), "sentence"),
+                (tr("Single Word (Word by Word)"), "word_by_word"),
+            ]
+            saved_display_mode = config.ui.get(
+                "subtitle_display_mode",
+                DEFAULT_SUBTITLE_SETTINGS["subtitle_display_mode"],
+            )
+            saved_mode_idx = 0
+            for i, (_, mode_val) in enumerate(subtitle_display_modes):
+                if mode_val == saved_display_mode:
+                    saved_mode_idx = i
+                    break
+            selected_display_mode = stable_selectbox(
+                tr("Display Mode"),
+                options=[val for _, val in subtitle_display_modes],
+                default_value=subtitle_display_modes[saved_mode_idx][1],
+                key="subtitle_display_mode_select",
+                format_func=lambda value: dict(
+                    (v, label) for label, v in subtitle_display_modes
+                ).get(value, value),
+                help=tr("Word-by-word Timing Help"),
+                disabled=subtitle_settings_disabled,
+            )
+            params.subtitle_display_mode = selected_display_mode
+            _set_runtime_config(
+                "ui", "subtitle_display_mode", params.subtitle_display_mode
+            )
+
+            # Subtitle Animation (None vs Pop Spring)
+            subtitle_animations = [
+                (tr("None"), "none"),
+                (tr("Pop Up (Spring)"), "pop_spring"),
+            ]
+            saved_anim = config.ui.get(
+                "subtitle_animation",
+                DEFAULT_SUBTITLE_SETTINGS["subtitle_animation"],
+            )
+            saved_anim_idx = 0
+            for i, (_, anim_val) in enumerate(subtitle_animations):
+                if anim_val == saved_anim:
+                    saved_anim_idx = i
+                    break
+            selected_anim = stable_selectbox(
+                tr("Subtitle Animation"),
+                options=[val for _, val in subtitle_animations],
+                default_value=subtitle_animations[saved_anim_idx][1],
+                key="subtitle_animation_select",
+                format_func=lambda value: dict(
+                    (v, label) for label, v in subtitle_animations
+                ).get(value, value),
+                disabled=subtitle_settings_disabled,
+            )
+            params.subtitle_animation = selected_anim
+            _set_runtime_config(
+                "ui", "subtitle_animation", params.subtitle_animation
+            )
 
             if params.subtitle_position == "custom":
                 saved_custom_position = config.ui.get(
