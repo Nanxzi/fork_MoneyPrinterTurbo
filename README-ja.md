@@ -174,7 +174,7 @@
 ### ナレーション・字幕・BGM
 
 - [x] 自動ナレーション、音声ファイルのアップロード、音声なしの 3 つの方式に対応し、音声サンプルとナレーション全体をプレビュー可能
-- [x] **Edge TTS（無料・API キー不要）**、Azure Speech、SiliconFlow、Google Gemini、Xiaomi MiMo、MiniMax、ElevenLabs、Chatterbox、Fish Audio などの音声サービスに対応
+- [x] **Edge TTS（無料・API キー不要）**、Azure Speech、SiliconFlow、Google Gemini、Xiaomi MiMo、MiniMax、ElevenLabs、Chatterbox、Kokoro、Fish Audio などの音声サービスに対応
 - [x] 字幕を自動生成し、フォント、位置、色、サイズ、縁取り、背景スタイルを調整可能
 - [x] ランダム、ローカル、AI 生成の BGM に対応し、音量を個別に調整可能
 
@@ -418,7 +418,7 @@ uv run python cli.py --batch-file ./tasks.json --stop-at video
 
 ### 音声合成
 
-WebUI の **Azure TTS V1** は **Edge TTS** を利用しており、無料かつ API キー不要です。MoneyPrinterTurbo は **Azure TTS V2**、**SiliconFlow TTS**、**Google Gemini TTS**、**Xiaomi MiMo TTS**、**ElevenLabs TTS**、セルフホストの **Chatterbox TTS**、**Fish Audio TTS**、および音声なしモードにも対応しています。
+WebUI の **Azure TTS V1** は **Edge TTS** を利用しており、無料かつ API キー不要です。MoneyPrinterTurbo は **Azure TTS V2**、**SiliconFlow TTS**、**Google Gemini TTS**、**Xiaomi MiMo TTS**、**ElevenLabs TTS**、セルフホストの **Chatterbox TTS**、セルフホストの **Kokoro TTS**、**Fish Audio TTS**、および音声なしモードにも対応しています。
 
 WebUI でプロバイダーと音声を選択し、必要な認証情報については画面の案内に従ってください。Edge TTS に API キーは不要です。[Azure TTS V2](https://portal.azure.com/) やその他のクラウドプロバイダーでは、それぞれのプラットフォームで発行した認証情報が必要です。利用可能な Edge TTS の音声は[音声リスト](./docs/voice-list.txt)で確認できます。
 
