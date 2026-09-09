@@ -48,7 +48,7 @@
     "LoomLoom Candidate Applied": "Seçilen senaryo ve anahtar kelimeler uygulandı",
     "Auto Detect": "Otomatik Algılama",
     "Video Script": "Video Senaryosu (İsteğe Bağlı)",
-    "Video Script Help": "Video konusundan AI ile oluşturmak için boş bırakın. Doğru noktalama, altyazı oluşturmayı kolaylaştırır.",
+    "Video Script Help": "Video konusundan AI ile oluşturmak için boş bırakın. Doğru noktalama, altyazı oluşturmayı kolaylaştırır. Azure TTS V1 (Edge TTS) ile desteklenir: [pause: 2s] veya [silence: 1s] ile duraklamalar ekleyebilirsiniz (0.1–10s).",
     "Generate Video Keywords": "AI ile Anahtar Kelime Oluştur",
     "Please Enter the Video Subject": "Lütfen Önce Video Senaryosunu Girin",
     "Please Enter the Video Subject First": "Lütfen önce video konusunu girin",

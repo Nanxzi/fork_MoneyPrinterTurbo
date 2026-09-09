@@ -48,7 +48,7 @@
     "LoomLoom Candidate Applied": "선택한 스크립트와 키워드가 적용되었습니다",
     "Auto Detect": "자동 감지",
     "Video Script": "영상 스크립트 (선택)",
-    "Video Script Help": "비워 두면 영상 주제로부터 AI가 생성합니다. 문장 부호를 잘 사용하면 자막 생성에 도움이 됩니다.",
+    "Video Script Help": "비워 두면 영상 주제로부터 AI가 생성합니다. 문장 부호를 잘 사용하면 자막 생성에 도움이 됩니다. Azure TTS V1 (Edge TTS) 지원: [pause: 2s] 또는 [일시중지: 2s]로 원하는 멈춤 시간을 추가할 수 있습니다 (0.1–10초).",
     "Generate Video Keywords": "AI로 키워드 생성",
     "Please Enter the Video Subject": "먼저 영상 스크립트를 입력하세요",
     "Please Enter the Video Subject First": "먼저 영상 주제를 입력하세요",

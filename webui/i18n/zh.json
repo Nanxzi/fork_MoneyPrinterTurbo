@@ -53,7 +53,7 @@
     "LoomLoom Candidate Applied": "已应用选中的文案和关键词",
     "Auto Detect": "自动检测",
     "Video Script": "视频文案（可选）",
-    "Video Script Help": "可留空，由 AI 根据视频主题生成。合理使用标点断句有助于生成字幕。",
+    "Video Script Help": "可留空，由 AI 根据视频主题生成。合理使用标点断句有助于生成字幕。仅支持 Azure TTS V1 (Edge TTS)：支持使用 [停顿: 2s] 或 [pause: 2s] 插入指定停顿（范围 0.1–10秒）。",
     "Generate Video Keywords": "点击使用AI根据**文案**生成视频关键词",
     "Please Enter the Video Subject": "请先填写视频文案",
     "Please Enter the Video Subject First": "请先填写视频主题",

@@ -48,7 +48,7 @@
     "LoomLoom Candidate Applied": "Testo e parole chiave selezionati applicati",
     "Auto Detect": "Rilevamento automatico",
     "Video Script": "Testo del video (facoltativo)",
-    "Video Script Help": "Lascia vuoto per generarlo con l'IA a partire dall'argomento del video. Una corretta punteggiatura aiuta a generare i sottotitoli.",
+    "Video Script Help": "Lascia vuoto per generarlo con l'IA a partire dall'argomento del video. Una corretta punteggiatura aiuta a generare i sottotitoli. Supportato con Azure TTS V1 (Edge TTS): usa [pausa: 2s] o [silenzio: 1s] per inserire pause (0.1–10s).",
     "Generate Video Keywords": "Genera parole chiave con l'IA",
     "Please Enter the Video Subject": "Inserisci prima il testo del video",
     "Please Enter the Video Subject First": "Inserisci prima l'argomento del video",

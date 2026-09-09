@@ -15,6 +15,7 @@ from openai.types.chat import ChatCompletion
 
 from app.config import config
 from app.models.llm_provider import DEFAULT_LLM_PROVIDER_ID, get_llm_provider
+from app.utils import utils
 
 _max_retries = 5
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
@@ -829,6 +830,7 @@ def generate_terms(
     match_script_order: bool = False,
     app_config=None,
 ) -> List[str]:
+    video_script = utils.remove_pause_tags(video_script or "").strip()
     if match_script_order:
         goal = (
             f"Generate {amount} chronological stock-video search terms that follow "

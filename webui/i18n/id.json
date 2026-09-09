@@ -48,7 +48,7 @@
     "LoomLoom Candidate Applied": "Skrip dan kata kunci terpilih diterapkan",
     "Auto Detect": "Deteksi Otomatis",
     "Video Script": "Skrip Video (Opsional)",
-    "Video Script Help": "Kosongkan untuk membuatnya dengan AI dari topik video. Tanda baca yang tepat membantu pembuatan subtitle.",
+    "Video Script Help": "Kosongkan untuk membuatnya dengan AI dari topik video. Tanda baca yang tepat membantu pembuatan subtitle. Didukung di Azure TTS V1 (Edge TTS): gunakan [pause: 2s] atau [silence: 1s] untuk jeda kustom (0.1–10s).",
     "Generate Video Keywords": "Buat Kata Kunci dengan AI",
     "Please Enter the Video Subject": "Silakan Masukkan Skrip Video Terlebih Dahulu",
     "Please Enter the Video Subject First": "Harap masukkan subjek video terlebih dahulu",

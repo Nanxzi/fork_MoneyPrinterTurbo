@@ -53,7 +53,7 @@
     "LoomLoom Candidate Applied": "Selected script and keywords applied",
     "Auto Detect": "Auto Detect",
     "Video Script": "Video Script (Optional)",
-    "Video Script Help": "Leave blank to generate it with AI from the video subject. Proper punctuation helps generate subtitles.",
+    "Video Script Help": "Leave blank to generate it with AI from the video subject. Proper punctuation helps generate subtitles. Supported on Azure TTS V1 (Edge TTS): use [pause: 2s] or [silence: 1s] to insert custom pauses (0.1–10s).",
     "Generate Video Keywords": "Generate Keywords with AI",
     "Please Enter the Video Subject": "Please Enter the Video Script First",
     "Please Enter the Video Subject First": "Please enter the video subject first",

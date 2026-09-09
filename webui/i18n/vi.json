@@ -48,7 +48,7 @@
     "LoomLoom Candidate Applied": "Đã áp dụng kịch bản và từ khóa đã chọn",
     "Auto Detect": "Tự Động Phát Hiện",
     "Video Script": "Kịch Bản Video (Không Bắt Buộc)",
-    "Video Script Help": "Để trống để AI tạo từ chủ đề video. Dấu câu hợp lý giúp tạo phụ đề chính xác hơn.",
+    "Video Script Help": "Để trống để AI tạo từ chủ đề video. Dấu câu hợp lý giúp tạo phụ đề chính xác hơn. Hỗ trợ trên Azure TTS V1 (Edge TTS): sử dụng [pause: 2s] hoặc [silence: 1s] để chèn khoảng dừng (0.1–10s).",
     "Generate Video Keywords": "Tạo từ khóa bằng AI",
     "Please Enter the Video Subject": "Vui lòng Nhập Kịch Bản Video Trước",
     "Please Enter the Video Subject First": "Vui lòng nhập chủ đề video trước",

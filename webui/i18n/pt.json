@@ -48,7 +48,7 @@
     "LoomLoom Candidate Applied": "Roteiro e palavras-chave selecionados aplicados",
     "Auto Detect": "Detectar Automaticamente",
     "Video Script": "Roteiro do vídeo (opcional)",
-    "Video Script Help": "Deixe em branco para gerá-lo com IA a partir do tema do vídeo. Uma pontuação adequada ajuda a gerar as legendas.",
+    "Video Script Help": "Deixe em branco para gerá-lo com IA a partir do tema do vídeo. Uma pontuação adequada ajuda a gerar as legendas. Suportado no Azure TTS V1 (Edge TTS): use [pausa: 2s] ou [silêncio: 1s] para inserir pausas (0.1–10s).",
     "Generate Video Keywords": "Gerar palavras-chave com IA",
     "Please Enter the Video Subject": "Por favor, insira o Roteiro do Vídeo primeiro",
     "Please Enter the Video Subject First": "Insira primeiro o tema do vídeo",
