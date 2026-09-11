@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import re
@@ -833,19 +834,52 @@ def _record_loomloom_run_reference(
     return None
 
 
+def _get_material_source_groups(task_id: str, video_paths: list[str]) -> dict[str, str]:
+    """Recover keyword groups from the downloaded material manifest."""
+    try:
+        with open(path.join(utils.task_dir(task_id), "script.json"), encoding="utf-8") as file:
+            payload = json.load(file)
+        groups = {
+            record["local_file"]: record["search_term"]
+            for record in payload.get("material_sources", [])
+            if isinstance(record, dict)
+            and isinstance(record.get("local_file"), str)
+            and isinstance(record.get("search_term"), str)
+            and record["search_term"]
+        }
+        return {
+            file: groups[path.basename(file)]
+            for file in video_paths
+            if path.basename(file) in groups
+        }
+    except (OSError, ValueError, AttributeError, TypeError) as exc:
+        logger.warning(f"Cannot read material keyword groups: task_id={task_id}, error={exc}")
+        return {}
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration
 ):
     final_video_paths = []
     combined_video_paths = []
     warnings = []
+    allocate_batch_materials = params.video_count > 1 and params.video_source in {
+        "pexels", "pixabay", "coverr", "local"
+    }
+    source_usage = {}
+    material_selections = []
+    source_groups = (
+        _get_material_source_groups(task_id, downloaded_videos)
+        if (allocate_batch_materials and params.match_materials_to_script
+            and params.video_source != "local")
+        else {}
+    )
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
     video_music_requested = (
         video_music_provider is not None
         and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
     )
-    # 多视频生成默认会打散素材以增加差异；但“按文案顺序匹配素材”追求的是
-    # 时间线稳定性和可解释性，所以开启后所有输出都使用顺序拼接。
+    # Matching preserves keyword order; batch allocation varies each keyword's candidates.
     if params.match_materials_to_script:
         video_concat_mode = VideoConcatMode.sequential
     elif params.video_count == 1:
@@ -861,6 +895,15 @@ def generate_final_videos(
             utils.task_dir(task_id), f"combined-{index}.mp4"
         )
         logger.info(f"\n\n## combining video: {index} => {combined_video_path}")
+        used_video_paths = []
+        batch_options = (
+            {
+                "source_usage": source_usage,
+                "source_groups": source_groups,
+                "used_video_paths": used_video_paths,
+            }
+            if allocate_batch_materials else {}
+        )
         video.combine_videos(
             combined_video_path=combined_video_path,
             video_paths=downloaded_videos,
@@ -872,7 +915,29 @@ def generate_final_videos(
             max_clip_duration=params.video_clip_duration,
             threads=params.n_threads,
             clip_speed=params.video_clip_speed,
+            **batch_options,
         )
+        if allocate_batch_materials:
+            selected_sources = list(dict.fromkeys(used_video_paths))
+            reused_sources = [file for file in selected_sources if source_usage.get(file, 0)]
+            for file in selected_sources:
+                source_usage[file] = source_usage.get(file, 0) + 1
+            material_selections.append({
+                "video_index": index,
+                "local_files": [path.basename(file) for file in used_video_paths],
+                "reused_files": [path.basename(file) for file in reused_sources],
+            })
+            task_artifacts.patch_script_data(task_id, material_selections=material_selections)
+            logger.info(
+                f"Batch material allocation: video_index={index}, "
+                f"sources={len(selected_sources)}, reused_sources={len(reused_sources)}"
+            )
+            if reused_sources:
+                warnings.append({
+                    "code": "batch_materials_reused",
+                    "video_index": index,
+                    "count": len(reused_sources),
+                })
 
         _progress += 50 / params.video_count / 2
         sm.state.update_task(task_id, progress=_progress)
@@ -1065,6 +1130,7 @@ def _run_cross_post(
     video_language: str,
     platforms: tuple[str, ...],
     youtube_privacy_status: str,
+    youtube_made_for_kids: bool = False,
 ) -> None:
     """后台执行跨平台发布，并只补充发布相关的任务字段。"""
     results = []
@@ -1111,6 +1177,7 @@ def _run_cross_post(
                     "youtube_description": metadata.get("caption", ""),
                     "tags": metadata.get("hashtags", []),
                     "privacyStatus": youtube_privacy_status,
+                    "selfDeclaredMadeForKids": youtube_made_for_kids,
                     "containsSyntheticMedia": True,
                 }
             post_title = (
@@ -1235,6 +1302,7 @@ def _schedule_cross_post(
     video_script: str,
     platforms: list[str],
     youtube_privacy_status: str,
+    youtube_made_for_kids: bool = False,
 ) -> str | None:
     """提交后台发布任务；成功返回 None，调度失败返回可查询的错误原因。"""
     if not _cross_post_slots.acquire(blocking=False):
@@ -1261,6 +1329,7 @@ def _schedule_cross_post(
             params.video_language or "",
             tuple(platforms),
             youtube_privacy_status,
+            youtube_made_for_kids,
         )
         _register_cross_post_future(task_id, future)
         future.add_done_callback(partial(_finalize_cross_post_future, task_id))
@@ -1570,6 +1639,10 @@ def _run_pipeline(
             platforms=platforms,
             youtube_privacy_status=(
                 upload_post.upload_post_service.youtube_privacy_status
+            ),
+            # 固定排队时的受众选择，之后修改 WebUI 不应改变已排队视频的声明。
+            youtube_made_for_kids=(
+                upload_post.upload_post_service.youtube_made_for_kids
             ),
         )
         # 队列满或线程池关闭属于同步可知的调度失败。任务状态已经由调度函数

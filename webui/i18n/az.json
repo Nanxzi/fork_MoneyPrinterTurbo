@@ -1,6 +1,11 @@
 {
   "Language": "Azərbaycan dili",
   "Translation": {
+    "Batch Material Reuse Warning": "{index}-ci videoda əvvəlki videolardan {count} mənbə klipi təkrar istifadə olundu: mövcud materiallar cari ardıcıllıq və müddət tələblərinə uyğun olaraq təkrarsız video yaratmaq üçün kifayət etmir.",
+    "YouTube Audience": "YouTube auditoriyası",
+    "Made for Kids": "Bəli, uşaqlar üçün nəzərdə tutulub",
+    "Not Made for Kids": "Xeyr, uşaqlar üçün nəzərdə tutulmayıb",
+    "YouTube Audience Help": "Videonun nəzərdə tutulduğu auditoriyaya uyğun seçim edin. Bu bəyanat YouTube-a video yüklənərkən göndərilir və yaradılan məzmunu dəyişmir.",
     "Kokoro Voices Unavailable": "Kokoro səsləri yüklənə bilmədi. Əvvəlki seçiminiz saxlanılıb. Əlaqəni yoxlamaq və ya səsləri əl ilə daxil etmək lazımdır.",
     "Login Required": "Giriş tələb olunur",
     "Please login to access settings": "Parametrlərə daxil olmaq üçün giriş etmək lazımdır",
@@ -395,8 +400,8 @@
     "Upload-Post Setup Guide": "Avtomatik paylaşımı aktivləşdirməzdən əvvəl:\n1. [API açarları]({api_keys_url}) səhifəsində API açarı yaradılmalıdır.\n2. [İstifadəçilərin idarə edilməsi]({manage_users_url}) səhifəsində paylaşım istifadəçisi yaradılmalı və ya seçilməli, sonra hədəf platformalar qoşulmalıdır.\n\nAşağıda Upload-Post hesabının e-poçtu deyil, həmin paylaşım istifadəçisinin **istifadəçi adı** daxil edilməlidir.",
     "YouTube Privacy Status": "YouTube məxfilik vəziyyəti",
     "OFox AI Video": "OFox süni intellekt videosu",
-    "OFox AI Video Help": "OFox çoxmodelli video API-si vasitəsilə tamamilə yeni kliplər yaradır (Seedance, Wan və digər modellər bir açarla). Göndərilən hər klip ödənişli tapşırıqdır.",
-    "OFox API Key": "OFox API açarı ([API açarını al](https://ofox.ai))",
+    "OFox AI Video Help": "Bir açarla müxtəlif modellərlə video yaradın, rəsmi model təminatçılarına birbaşa qoşulun. İstifadəyə görə ödəniş — sabit, sürətli və limitsiz.",
+    "OFox API Key": "OFox API açarı ([API açarını al](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=moneyprinterturbo))",
     "OFox Text-to-Video Model": "OFox mətndən video yaratma modeli",
     "OFox Base URL": "OFox əsas URL-i",
     "Please Enter the OFox API Key": "**OFox API açarı** daxil edilməlidir",

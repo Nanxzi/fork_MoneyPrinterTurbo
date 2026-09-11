@@ -1,6 +1,11 @@
 {
   "Language": "Bahasa Indonesia",
   "Translation": {
+    "Batch Material Reuse Warning": "Video {index} menggunakan kembali {count} klip sumber dari video sebelumnya: materi yang tersedia tidak cukup untuk menghindari pengulangan dengan urutan dan durasi saat ini.",
+    "YouTube Audience": "Audiens YouTube",
+    "Made for Kids": "Ya, dibuat untuk anak-anak",
+    "Not Made for Kids": "Tidak, bukan untuk anak-anak",
+    "YouTube Audience Help": "Pilih sesuai target audiens video. Pernyataan ini dikirim saat mengunggah ke YouTube dan tidak mengubah konten yang dihasilkan.",
     "Kokoro Base URL": "URL Dasar Kokoro",
     "Kokoro API Key": "Kunci API Kokoro (opsional; [Panduan Konfigurasi](https://github.com/remsky/Kokoro-FastAPI))",
     "Kokoro Model": "Model Kokoro",
@@ -395,8 +400,8 @@
     "Upload-Post Setup Guide": "Sebelum mengaktifkan publikasi otomatis:\n1. Buat kunci API di [API Keys]({api_keys_url}).\n2. Buat atau pilih pengguna penerbitan di [Manage Users]({manage_users_url}), lalu hubungkan platform tujuan.\n\nMasukkan **Username** pengguna penerbitan tersebut di bawah, bukan email akun Upload-Post Anda.",
     "YouTube Privacy Status": "Status Privasi YouTube",
     "OFox AI Video": "OFox AI Video",
-    "OFox AI Video Help": "Buat klip baru melalui API resmi OFox. Setiap klip yang dikirim merupakan tugas OFox berbayar.",
-    "OFox API Key": "Kunci API OFox ([Dapatkan Kunci API](https://ofox.ai))",
+    "OFox AI Video Help": "Satu key untuk membuat video dengan berbagai model melalui akses langsung ke penyedia model resmi. Bayar sesuai pemakaian—stabil, cepat, dan tanpa batas.",
+    "OFox API Key": "Kunci API OFox ([Dapatkan Kunci API](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=moneyprinterturbo))",
     "OFox Text-to-Video Model": "Model teks-ke-video OFox",
     "OFox Base URL": "URL Dasar OFox",
     "Please Enter the OFox API Key": "Masukkan **Kunci API OFox**",

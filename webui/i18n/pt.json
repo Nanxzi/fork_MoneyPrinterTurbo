@@ -1,6 +1,11 @@
 {
   "Language": "Português",
   "Translation": {
+    "Batch Material Reuse Warning": "O vídeo {index} reutilizou {count} clipes de origem dos vídeos anteriores: os materiais disponíveis não são suficientes para evitar repetições com a ordem e a duração atuais.",
+    "YouTube Audience": "Público do YouTube",
+    "Made for Kids": "Sim, é conteúdo para crianças",
+    "Not Made for Kids": "Não, não é conteúdo para crianças",
+    "YouTube Audience Help": "Escolha de acordo com o público-alvo do vídeo. Esta declaração é enviada no upload para o YouTube e não altera o conteúdo gerado.",
     "Kokoro Base URL": "URL base do Kokoro",
     "Kokoro API Key": "Chave de API do Kokoro (opcional; [Configuração](https://github.com/remsky/Kokoro-FastAPI))",
     "Kokoro Model": "Modelo do Kokoro",
@@ -395,8 +400,8 @@
     "Upload-Post Setup Guide": "Antes de ativar a publicação automática:\n1. Crie uma chave API em [API Keys]({api_keys_url}).\n2. Crie ou selecione um usuário de publicação em [Manage Users]({manage_users_url}) e conecte as plataformas de destino.\n\nInforme abaixo o **nome de usuário** de publicação, não o e-mail da sua conta Upload-Post.",
     "YouTube Privacy Status": "Status de Privacidade do YouTube",
     "OFox AI Video": "OFox AI Video",
-    "OFox AI Video Help": "Gere novos clipes pela API oficial OFox. Cada clipe enviado cria uma tarefa OFox paga.",
-    "OFox API Key": "Chave de API do OFox ([Obter chave de API](https://ofox.ai))",
+    "OFox AI Video Help": "Uma chave para criar vídeos com vários modelos e acesso direto aos provedores oficiais. Pague conforme o uso: estável, rápido e sem limites.",
+    "OFox API Key": "Chave de API do OFox ([Obter chave de API](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=moneyprinterturbo))",
     "OFox Text-to-Video Model": "Modelo de texto para vídeo OFox",
     "OFox Base URL": "URL base do OFox",
     "Please Enter the OFox API Key": "Insira a **chave de API do OFox**",
