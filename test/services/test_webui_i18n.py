@@ -47,6 +47,7 @@ ENGLISH_FALLBACK_KEYS = frozenset(
         "Local LLM Script Generation",
         "llm_provider_label.apimart",
         "llm_provider_label.openrouter",
+        "llm_provider_label.api_route",
         "llm_provider_label.shengsuanyun",
         "LoomLoom Poll Retry Pending",
         "LoomLoom Poll Retry Warning",
@@ -87,6 +88,7 @@ ENGLISH_FALLBACK_KEYS = frozenset(
         "Stop Tracking LoomLoom Run",
         "Stop Tracking LoomLoom Run Help",
         "Unavailable AI Video Model",
+        "VoxCPM Speed Not Supported",
     }
 )
 FORMAT_PLACEHOLDER_PATTERN = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
