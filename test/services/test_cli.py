@@ -1,3 +1,4 @@
+import ast
 import io
 import json
 import os
@@ -5,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import cli
 from app.config import config as app_config
+from app.models.schema import VideoTransitionMode
 
 
 class TestCli(unittest.TestCase):
@@ -49,6 +51,26 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(default_params.video_fit_mode.value, "cover")
         self.assertEqual(contain_params.video_fit_mode.value, "contain")
+
+    def test_zoom_transition_modes_are_reachable_from_the_cli(self):
+        # Every transition the render pipeline understands must also be
+        # selectable from the CLI. Deriving the expectation from the enum stops
+        # the two lists from drifting apart again.
+        cli_modes = set(cli._TRANSITION_MODE_VALUES.values()) - {None}
+        pipeline_modes = {
+            mode.value
+            for mode in VideoTransitionMode
+            if mode is not VideoTransitionMode.none
+        }
+        self.assertEqual(cli_modes, pipeline_modes)
+
+        zoom_params = cli.build_video_params(
+            cli.parse_args(
+                ["--video-subject", "test", "--video-transition-mode", "zoom-in"]
+            )
+        )
+
+        self.assertEqual(zoom_params.video_transition_mode.value, "ZoomIn")
 
     def test_complete_script_can_replace_video_subject(self):
         args = cli.parse_args(["--video-script", "完整的视频文案"])
@@ -535,6 +557,20 @@ class TestCli(unittest.TestCase):
         params = cli.build_video_params(args)
         self.assertEqual(params.bgm_type, "")
 
+    def test_video_music_providers_are_selectable_from_the_cli(self):
+        # --bgm-type must reach every video-matched music provider the runtime
+        # dispatches on, otherwise CLI users cannot use a mode the WebUI and the
+        # API already accept. Deriving the expectation from the runtime registry
+        # keeps the two lists from drifting apart again.
+        from app.services import task as task_service
+
+        for provider in sorted(task_service._VIDEO_MUSIC_PROVIDERS):
+            args = cli.parse_args(
+                ["--video-subject", "test", "--bgm-type", provider]
+            )
+            params = cli.build_video_params(args)
+            self.assertEqual(params.bgm_type, provider)
+
     def test_sonilo_prompt_implies_sonilo_bgm_mode(self):
         args = cli.parse_args(
             [
@@ -547,6 +583,52 @@ class TestCli(unittest.TestCase):
         params = cli.build_video_params(args)
         self.assertEqual(params.bgm_type, "sonilo")
         self.assertEqual(params.sonilo_bgm_prompt, "warm acoustic")
+
+    def test_video_music_prompt_reaches_every_ai_music_provider(self):
+        # video_music_prompt 与供应商无关，WebUI 为每个 AI 配乐供应商都写入
+        # 该字段。CLI 若只提供 Sonilo 专用参数，选中 ElevenLabs 的用户就无法
+        # 传提示词。期望值从运行时注册表推导，避免两份清单再次漂移。
+        from app.services import task as task_service
+
+        for provider in sorted(task_service._VIDEO_MUSIC_PROVIDERS):
+            args = cli.parse_args(
+                [
+                    "--video-subject",
+                    "test",
+                    "--bgm-type",
+                    provider,
+                    "--video-music-prompt",
+                    "warm acoustic",
+                ]
+            )
+            params = cli.build_video_params(args)
+            self.assertEqual(params.bgm_type, provider)
+            self.assertEqual(params.video_music_prompt, "warm acoustic")
+
+    def test_video_music_prompt_requires_an_ai_music_provider(self):
+        # 下游只在 AI 配乐供应商分支读取该提示词。同一个 --bgm-type random 在
+        # 没有提示词时仍然可用，说明这里的拒绝来自提示词与供应商的组合，而不是
+        # 参数本身不被识别。
+        cli.parse_args(["--video-subject", "test", "--bgm-type", "random"])
+        for bgm_type in ("random", "none"):
+            error_output = io.StringIO()
+            with redirect_stderr(error_output):
+                with self.assertRaises(SystemExit) as cm:
+                    cli.parse_args(
+                        [
+                            "--video-subject",
+                            "test",
+                            "--bgm-type",
+                            bgm_type,
+                            "--video-music-prompt",
+                            "warm acoustic",
+                        ]
+                    )
+            self.assertEqual(cm.exception.code, 2)
+            self.assertIn(
+                "--video-music-prompt requires --bgm-type sonilo or elevenlabs",
+                error_output.getvalue(),
+            )
 
     def test_local_material_filename_resolved_to_absolute_path(self):
         """After preprocess_video, material.url should be an absolute path, not a bare filename."""
@@ -1266,6 +1348,44 @@ class TestCli(unittest.TestCase):
         self.assertEqual(code, 2)
         start.assert_not_called()
 
+    def test_video_clip_speed_is_reachable_from_the_cli(self):
+        """
+        WebUI 的滑块把 video_clip_speed 写进 config.toml，批量清单也接受该字段
+        （见 _validate_batch_task_params），但 VideoParams 把它硬编码成 1.0 而不是
+        读取 config.ui，因此单任务命令行此前既没有对应参数、也拿不到保存值。
+        """
+        explicit_params = cli.build_video_params(
+            cli.parse_args(["--video-subject", "test", "--video-clip-speed", "1.5"])
+        )
+        self.assertEqual(explicit_params.video_clip_speed, 1.5)
+
+        saved_args = cli.parse_args(["--video-subject", "test"])
+
+        with patch.dict(app_config.ui, {"video_clip_speed": 1.25}, clear=True):
+            saved_params = cli.build_video_params(saved_args)
+
+        self.assertEqual(saved_params.video_clip_speed, 1.25)
+
+    def test_video_clip_speed_range_matches_the_runtime_normalizer(self):
+        """
+        CLI 的取值范围必须与 app/utils/utils.py 的 normalize_clip_speed() 以及
+        WebUI 滑块一致，否则命令行会接受运行时随后改写的取值。
+        """
+        from app.utils import utils
+
+        self.assertEqual(cli._CLIP_SPEED_MIN, utils._CLIP_SPEED_MIN)
+        self.assertEqual(cli._CLIP_SPEED_MAX, utils._CLIP_SPEED_MAX)
+
+        for value in ("0.4", "3.0", "nan", "inf"):
+            error_output = io.StringIO()
+            with redirect_stderr(error_output):
+                with self.assertRaises(SystemExit) as cm:
+                    cli.parse_args(
+                        ["--video-subject", "test", "--video-clip-speed", value]
+                    )
+            self.assertEqual(cm.exception.code, 2)
+            self.assertIn("video-clip-speed", error_output.getvalue())
+
     def test_later_null_runtime_field_prevents_every_batch_task_from_starting(self):
         for field_name in ("video_aspect", "video_concat_mode"):
             with self.subTest(field_name=field_name), tempfile.TemporaryDirectory() as temp_dir:
@@ -1868,6 +1988,57 @@ class TestCliUiDefaults(unittest.TestCase):
 
         self.assertEqual(params.subtitle_position, "custom")
         self.assertEqual(params.custom_position, 42.5)
+
+    def test_two_thirds_bottom_subtitle_position_is_supported(self):
+        """
+        WebUI 的「距底部 2/3」会把 two_thirds_bottom 写进 config.toml，
+        app/services/video.py 也按该取值渲染。CLI 此前只认识另外四个位置，
+        导致同一个 config.toml 在两个入口产出不同画面。
+        """
+        explicit_params = cli.build_video_params(
+            cli.parse_args(
+                [
+                    "--video-subject",
+                    "test",
+                    "--subtitle-position",
+                    "two_thirds_bottom",
+                ]
+            )
+        )
+        self.assertEqual(explicit_params.subtitle_position, "two_thirds_bottom")
+
+        saved_args = cli.parse_args(["--video-subject", "test"])
+
+        with patch.dict(
+            app_config.ui, {"subtitle_position": "two_thirds_bottom"}, clear=True
+        ):
+            saved_params = cli.build_video_params(saved_args)
+
+        self.assertEqual(saved_params.subtitle_position, "two_thirds_bottom")
+
+    def test_subtitle_positions_stay_aligned_with_the_webui(self):
+        """
+        两个入口共享同一份 config.toml，因此 CLI 必须接受 WebUI 能保存的每一个
+        字幕位置，否则保存值会在命令行入口被静默换成 bottom。
+        """
+        source = (Path(__file__).parent.parent.parent / "webui" / "Main.py").read_text(
+            encoding="utf-8"
+        )
+        webui_positions = set()
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Assign) or not any(
+                isinstance(target, ast.Name) and target.id == "subtitle_positions"
+                for target in node.targets
+            ):
+                continue
+            webui_positions = {
+                ast.literal_eval(element.elts[1]) for element in node.value.elts
+            }
+
+        self.assertTrue(webui_positions)
+        self.assertEqual(
+            sorted(webui_positions - set(cli._SUBTITLE_POSITION_VALUES)), []
+        )
 
     def test_unusable_saved_subtitle_position_falls_back(self):
         """超出取值范围的保存位置回退到内置默认值。"""

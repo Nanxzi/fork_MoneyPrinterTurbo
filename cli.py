@@ -97,6 +97,23 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
+# 片段播放速度的取值范围。app/utils/utils.py 的 normalize_clip_speed() 用同一
+# 范围做限幅，webui/Main.py 的滑块也使用 0.5~2.0。集中定义后，单任务参数、
+# 批量清单校验和 [ui] 保存值不会再次出现取值不一致。
+_CLIP_SPEED_MIN = 0.5
+_CLIP_SPEED_MAX = 2.0
+
+
+def _clip_speed(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or not _CLIP_SPEED_MIN <= parsed <= _CLIP_SPEED_MAX:
+        raise argparse.ArgumentTypeError(
+            "video-clip-speed must be a finite number between "
+            f"{_CLIP_SPEED_MIN} and {_CLIP_SPEED_MAX}, got {value!r}"
+        )
+    return parsed
+
+
 def _percent_position(value: str) -> float:
     parsed = float(value)
     if not math.isfinite(parsed) or parsed < 0 or parsed > 100:
@@ -116,9 +133,10 @@ def _hex_color(value: str) -> str:
 
 def _subtitle_position(value: str) -> str:
     """校验保存的字幕位置，取值范围与命令行参数保持一致。"""
-    if value not in ("top", "center", "bottom", "custom"):
+    if value not in _SUBTITLE_POSITION_VALUES:
         raise argparse.ArgumentTypeError(
-            f"subtitle-position must be one of: top, center, bottom, custom, got {value!r}"
+            "subtitle-position must be one of: "
+            f"{', '.join(_SUBTITLE_POSITION_VALUES)}, got {value!r}"
         )
     return value
 
@@ -140,7 +158,20 @@ _TRANSITION_MODE_VALUES = {
     "fade-out": "FadeOut",
     "slide-in": "SlideIn",
     "slide-out": "SlideOut",
+    "zoom-in": "ZoomIn",
+    "zoom-out": "ZoomOut",
 }
+
+# 单任务 argparse 和批量清单必须共享同一份字幕位置取值，避免再次出现
+# 「WebUI 能保存、CLI 却拒绝」的落差。取值需与 app/services/video.py 的
+# 渲染分支及 webui/Main.py 的下拉框保持一致。
+_SUBTITLE_POSITION_VALUES = (
+    "top",
+    "center",
+    "bottom",
+    "two_thirds_bottom",
+    "custom",
+)
 
 
 def _transition_mode(value: str) -> str | None:
@@ -162,14 +193,22 @@ def _video_fit_mode(value: str) -> str:
     return normalized
 
 
+# 只有这些取值会请求外部音乐生成服务，因此只有它们消费配乐提示词。取值需与
+# app/services/task.py 的 _VIDEO_MUSIC_PROVIDERS 保持一致；集中定义后，新增
+# 配乐供应商不会再次遗漏 --bgm-type 校验、批量校验和提示词参数。
+_CLI_MUSIC_BGM_TYPES = ("sonilo", "elevenlabs")
+_BGM_TYPE_CHOICES_TEXT = "none, random, custom, " + ", ".join(_CLI_MUSIC_BGM_TYPES)
+_BGM_TYPE_METAVAR = "{none,random,custom," + ",".join(_CLI_MUSIC_BGM_TYPES) + "}"
+
+
 def _bgm_type(value: str) -> str:
     normalized = value.strip().lower()
     if normalized == "none":
         return ""
-    if normalized in {"", "random", "custom", "sonilo"}:
+    if normalized in {"", "random", "custom", *_CLI_MUSIC_BGM_TYPES}:
         return normalized
     raise argparse.ArgumentTypeError(
-        "bgm-type must be one of: none, random, custom, sonilo"
+        f"bgm-type must be one of: {_BGM_TYPE_CHOICES_TEXT}"
     )
 
 
@@ -353,7 +392,7 @@ Batch manifests:
         "--video-transition-mode",
         type=_transition_mode,
         default=None,
-        metavar="{none,shuffle,fade-in,fade-out,slide-in,slide-out}",
+        metavar="{none,shuffle,fade-in,fade-out,slide-in,slide-out,zoom-in,zoom-out}",
         help="transition applied between source clips (default: none)",
     )
     video_group.add_argument(
@@ -362,6 +401,15 @@ Batch manifests:
         default=None,
         help=(
             "maximum duration of each source clip in seconds, at least 1 (default: 5)"
+        ),
+    )
+    video_group.add_argument(
+        "--video-clip-speed",
+        type=_clip_speed,
+        default=None,
+        help=(
+            "playback speed multiplier applied to every source clip, between "
+            "0.5 and 2.0 (default: 1.0)"
         ),
     )
     video_group.add_argument(
@@ -425,17 +473,26 @@ Batch manifests:
         "--bgm-type",
         type=_bgm_type,
         default=None,
-        metavar="{none,random,custom,sonilo}",
+        metavar=_BGM_TYPE_METAVAR,
         help=(
             "background music mode; Sonilo reads its API key from config.toml or "
-            "SONILO_API_KEY; --bgm-file implies custom when omitted "
-            "(default: random)"
+            "SONILO_API_KEY, ElevenLabs from config.toml or ELEVENLABS_API_KEY; "
+            "--bgm-file implies custom when omitted (default: random)"
         ),
     )
     audio_group.add_argument(
         "--sonilo-bgm-prompt",
         default=None,
         help="optional music style prompt for Sonilo, up to 2000 characters",
+    )
+    audio_group.add_argument(
+        "--video-music-prompt",
+        default=None,
+        help=(
+            "optional music style prompt for the selected AI background music "
+            "provider (sonilo or elevenlabs); the provider's own length limit "
+            "is enforced before generation"
+        ),
     )
     audio_group.add_argument(
         "--bgm-file",
@@ -477,7 +534,7 @@ Batch manifests:
     )
     subtitle_group.add_argument(
         "--subtitle-position",
-        choices=["top", "center", "bottom", "custom"],
+        choices=_SUBTITLE_POSITION_VALUES,
         default=None,
         help=(
             "subtitle vertical position (default: [ui].subtitle_position from "
@@ -651,6 +708,18 @@ Batch manifests:
                 "--sonilo-bgm-prompt can only be combined with --bgm-type sonilo"
             )
 
+    # 提示词字段本身与供应商无关，所以不像 Sonilo 专用参数那样推断 bgm_type：
+    # 推断出来的供应商可能不是用户想要的那个。必须显式选择 AI 配乐供应商，
+    # 否则该提示词会被静默丢弃。批量清单仍可按任务单独设置该字段。
+    if (
+        not args.batch_file
+        and args.video_music_prompt
+        and args.bgm_type not in _CLI_MUSIC_BGM_TYPES
+    ):
+        parser.error(
+            "--video-music-prompt requires --bgm-type sonilo or elevenlabs"
+        )
+
     if (
         not args.batch_file
         and args.custom_position is not None
@@ -791,6 +860,7 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",
+        "video_clip_speed",
         "match_materials_to_script",
         "n_threads",
         "voice_volume",
@@ -800,6 +870,7 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "bgm_file",
         "bgm_volume",
         "sonilo_bgm_prompt",
+        "video_music_prompt",
         "font_name",
         "subtitle_position",
         "custom_position",
@@ -816,7 +887,11 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
 
     # 没有显式传入命令行参数时，使用 WebUI 保存的值。只补充上面尚未由命令行
     # 设置的字段；若保存值缺失，则继续沿用 VideoParams 的默认值。
+    # VideoParams 里多数可保存字段（subtitle_position、custom_position 等）在
+    # 模型导入时就读取 config.ui，video_clip_speed 却是硬编码的 1.0，因此必须
+    # 在这里显式补上，否则 WebUI 保存的速度在命令行会被静默丢弃。
     ui_defaults = (
+        ("video_clip_speed", float, _clip_speed),
         ("video_fit_mode", str, _video_fit_mode),
         ("font_name", str, None),
         ("text_fore_color", str, _hex_color),
@@ -1071,9 +1146,10 @@ def _validate_batch_task_params(
 
     if stop_at == "subtitle" and not params.subtitle_enabled:
         raise ValueError("stop_at=subtitle cannot be combined with disabled subtitles")
-    if params.subtitle_position not in {"top", "center", "bottom", "custom"}:
+    if params.subtitle_position not in _SUBTITLE_POSITION_VALUES:
         raise ValueError(
-            "subtitle_position must be one of: top, center, bottom, custom"
+            "subtitle_position must be one of: "
+            + ", ".join(_SUBTITLE_POSITION_VALUES)
         )
     if custom_position_is_explicit and params.subtitle_position != "custom":
         raise ValueError("custom_position requires subtitle_position=custom")
@@ -1081,9 +1157,12 @@ def _validate_batch_task_params(
         raise ValueError("custom_position must be a finite number between 0 and 100")
     if params.video_clip_speed is not None and (
         not math.isfinite(params.video_clip_speed)
-        or not 0.5 <= params.video_clip_speed <= 2.0
+        or not _CLIP_SPEED_MIN <= params.video_clip_speed <= _CLIP_SPEED_MAX
     ):
-        raise ValueError("video_clip_speed must be a finite number between 0.5 and 2.0")
+        raise ValueError(
+            "video_clip_speed must be a finite number between "
+            f"{_CLIP_SPEED_MIN} and {_CLIP_SPEED_MAX}"
+        )
     if params.text_background_color is False and params.rounded_subtitle_background:
         raise ValueError(
             "rounded_subtitle_background requires an enabled subtitle background"
@@ -1124,12 +1203,16 @@ def _validate_batch_task_params(
         if value is not None and value < 1:
             raise ValueError(f"{name} must be >= 1")
 
-    if params.bgm_type not in {"", "random", "custom", "sonilo"}:
-        raise ValueError("bgm_type must be one of: none, random, custom, sonilo")
+    if params.bgm_type not in {"", "random", "custom", *_CLI_MUSIC_BGM_TYPES}:
+        raise ValueError(f"bgm_type must be one of: {_BGM_TYPE_CHOICES_TEXT}")
     if params.bgm_file and params.bgm_type != "custom":
         raise ValueError("bgm_file requires bgm_type=custom")
     if params.sonilo_bgm_prompt and params.bgm_type != "sonilo":
         raise ValueError("sonilo_bgm_prompt requires bgm_type=sonilo")
+    if params.video_music_prompt and params.bgm_type not in _CLI_MUSIC_BGM_TYPES:
+        raise ValueError(
+            "video_music_prompt requires bgm_type=sonilo or elevenlabs"
+        )
 
 
 def _build_batch_tasks(args: argparse.Namespace) -> list[VideoParams]:
