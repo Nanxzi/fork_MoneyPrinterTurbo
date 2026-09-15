@@ -243,6 +243,13 @@ apimart_api_key = ""
 apimart_base_url = ""
 apimart_model_name = ""
 
+# Fluxion AI：使用 OpenAI 接口分组的 API Key，地址和模型可按分组覆盖。
+# 留空时默认使用 https://fluxionai.space/v1 和 gpt-5.5。
+# 模型广场：https://fluxionai.space/model-plaza
+fluxionai_api_key = ""
+fluxionai_base_url = ""
+fluxionai_model_name = ""
+
 # OpenAI or another OpenAI Chat Completions-compatible provider.
 # API key: https://platform.openai.com/api-keys
 openai_api_key = ""
@@ -536,6 +543,9 @@ api_key = ""
 # Available models include eleven_multilingual_v2, eleven_flash_v2_5, and eleven_v3.
 model_id = "eleven_multilingual_v2"
 # Video-to-Music uses a separate model family while sharing the same API key.
+# music_base_url only configures the Video-to-Music endpoint, so it can point at
+# a proxy or a self-hosted gateway while the voice API keeps the default host.
+music_base_url = "https://api.elevenlabs.io"
 music_model_id = "music_v2"
 music_timeout = 600
 
@@ -624,6 +634,7 @@ open_task_folder_on_completion = true
 # video_count = 1
 # tts_server = "azure-tts-v1"
 # voice_name = ""
+# voice_mode = "tts"                 # "tts", "upload", or "none"
 # voice_volume = 1.0
 # voice_rate = 1.0
 # bgm_type = "random"
@@ -632,6 +643,8 @@ open_task_folder_on_completion = true
 # sonilo_bgm_prompt = ""
 # elevenlabs_music_prompt = ""
 # subtitle_enabled = true
+# subtitle_display_mode = "sentence" # "sentence" or "word_by_word"
+# subtitle_animation = "none"        # "none" or "pop_spring"
 # font_name = "MicrosoftYaHeiBold.ttc"
 # font_size = 60
 # text_fore_color = "#FFFFFF"

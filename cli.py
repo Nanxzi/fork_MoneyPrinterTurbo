@@ -41,6 +41,7 @@ _CLI_VIDEO_SOURCES = (
     "pexels",
     "pixabay",
     "coverr",
+    "wavespeed",
     "volcengine_seedance",
     "ofox",
     "metaso_minimax",
@@ -141,6 +142,26 @@ def _subtitle_position(value: str) -> str:
     return value
 
 
+def _subtitle_display_mode(value: str) -> str:
+    """校验保存的字幕展示模式，取值范围与命令行参数保持一致。"""
+    if value not in _SUBTITLE_DISPLAY_MODE_VALUES:
+        raise argparse.ArgumentTypeError(
+            "subtitle-display-mode must be one of: "
+            f"{', '.join(_SUBTITLE_DISPLAY_MODE_VALUES)}, got {value!r}"
+        )
+    return value
+
+
+def _subtitle_animation(value: str) -> str:
+    """校验保存的字幕动画，取值范围与命令行参数保持一致。"""
+    if value not in _SUBTITLE_ANIMATION_VALUES:
+        raise argparse.ArgumentTypeError(
+            "subtitle-animation must be one of: "
+            f"{', '.join(_SUBTITLE_ANIMATION_VALUES)}, got {value!r}"
+        )
+    return value
+
+
 def _task_id(value: str) -> str:
     """CLI 自定义任务标识只接受 UUID，避免该值被解释为文件系统路径。"""
     try:
@@ -172,6 +193,12 @@ _SUBTITLE_POSITION_VALUES = (
     "two_thirds_bottom",
     "custom",
 )
+
+# 字幕展示模式与入场动画由 WebUI 保存进 [ui]。两者随「逐词字幕 + 弹跳动画」
+# 加入时只改了 WebUI 与模型字段默认值，命令行一直缺少开关。取值需与
+# app/models/schema.py 的 _SUBTITLE_DISPLAY_MODES / _SUBTITLE_ANIMATIONS 一致。
+_SUBTITLE_DISPLAY_MODE_VALUES = ("sentence", "word_by_word")
+_SUBTITLE_ANIMATION_VALUES = ("none", "pop_spring")
 
 
 def _transition_mode(value: str) -> str | None:
@@ -333,6 +360,14 @@ Batch manifests:
         default="video",
         choices=_PIPELINE_STAGES,
         help="stop after this pipeline stage; see the stage order below",
+    )
+    material_group.add_argument(
+        "--confirm-wavespeed-charge",
+        action="store_true",
+        help=(
+            "confirm that WaveSpeed video generation creates paid tasks; required "
+            "with --video-source wavespeed for materials or video output"
+        ),
     )
     material_group.add_argument(
         "--confirm-seedance-charge",
@@ -542,6 +577,24 @@ Batch manifests:
         ),
     )
     subtitle_group.add_argument(
+        "--subtitle-display-mode",
+        choices=_SUBTITLE_DISPLAY_MODE_VALUES,
+        default=None,
+        help=(
+            "subtitle timing: sentence by sentence, or one word at a time "
+            "(default: [ui].subtitle_display_mode from config.toml; sentence)"
+        ),
+    )
+    subtitle_group.add_argument(
+        "--subtitle-animation",
+        choices=_SUBTITLE_ANIMATION_VALUES,
+        default=None,
+        help=(
+            "subtitle entrance animation (default: [ui].subtitle_animation from "
+            "config.toml; none when unset)"
+        ),
+    )
+    subtitle_group.add_argument(
         "--custom-position",
         type=_percent_position,
         default=None,
@@ -664,6 +717,16 @@ Batch manifests:
         )
     if not args.batch_file and args.video_source != "local" and has_video_materials:
         parser.error("--video-materials can only be used with --video-source local")
+    if (
+        not args.batch_file
+        and args.video_source == "wavespeed"
+        and stage_requires_materials
+        and not args.confirm_wavespeed_charge
+    ):
+        parser.error(
+            "--confirm-wavespeed-charge is required with "
+            "--video-source wavespeed"
+        )
     if (
         not args.batch_file
         and args.video_source == "volcengine_seedance"
@@ -873,6 +936,8 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "video_music_prompt",
         "font_name",
         "subtitle_position",
+        "subtitle_display_mode",
+        "subtitle_animation",
         "custom_position",
         "text_fore_color",
         "font_size",
@@ -894,6 +959,8 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         ("video_clip_speed", float, _clip_speed),
         ("video_fit_mode", str, _video_fit_mode),
         ("font_name", str, None),
+        ("subtitle_display_mode", str, _subtitle_display_mode),
+        ("subtitle_animation", str, _subtitle_animation),
         ("text_fore_color", str, _hex_color),
         ("font_size", int, _positive_int),
         ("rounded_subtitle_background", bool, None),
@@ -1086,6 +1153,7 @@ def _validate_batch_task_params(
     *,
     stop_at: str,
     custom_position_is_explicit: bool,
+    wavespeed_charge_confirmed: bool,
     seedance_charge_confirmed: bool,
     ofox_charge_confirmed: bool,
     metaso_minimax_charge_confirmed: bool,
@@ -1121,6 +1189,14 @@ def _validate_batch_task_params(
         )
     if params.video_source != "local" and params.video_materials:
         raise ValueError("video_materials can only be used with video_source=local")
+    if (
+        params.video_source == "wavespeed"
+        and stop_at in {"materials", "video"}
+        and not wavespeed_charge_confirmed
+    ):
+        raise ValueError(
+            "--confirm-wavespeed-charge is required for WaveSpeed video generation"
+        )
     if (
         params.video_source == "volcengine_seedance"
         and stop_at in {"materials", "video"}
@@ -1251,6 +1327,7 @@ def _build_batch_tasks(args: argparse.Namespace) -> list[VideoParams]:
                     or "custom_position" in override_fields
                 ),
                 seedance_charge_confirmed=args.confirm_seedance_charge,
+                wavespeed_charge_confirmed=args.confirm_wavespeed_charge,
                 ofox_charge_confirmed=args.confirm_ofox_charge,
                 metaso_minimax_charge_confirmed=(
                     args.confirm_metaso_minimax_charge
