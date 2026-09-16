@@ -45,6 +45,7 @@ _CLI_VIDEO_SOURCES = (
     "volcengine_seedance",
     "ofox",
     "metaso_minimax",
+    "muapi",
     "openai_image",
     "local",
 )
@@ -393,6 +394,14 @@ Batch manifests:
             "with --video-source metaso_minimax for materials or video output"
         ),
     )
+    material_group.add_argument(
+        "--confirm-muapi-charge",
+        action="store_true",
+        help=(
+            "confirm that MuAPI video generation creates paid tasks; required "
+            "with --video-source muapi for materials or video output"
+        ),
+    )
 
     video_group = parser.add_argument_group("video output")
     video_group.add_argument(
@@ -473,7 +482,8 @@ Batch manifests:
             "[ui].voice_mode of 'none' or 'upload' resolves to no-voice "
             "instead, unless this option is given. "
             "Use 'no-voice' for silent output. Provider-specific identifiers "
-            "use prefixes such as gemini:, mimo:, elevenlabs:, chatterbox:, and kokoro:"
+            "use prefixes such as gemini:, mimo:, elevenlabs:, chatterbox:, "
+            "kokoro:, and voxcpm:"
         ),
     )
     audio_group.add_argument(
@@ -755,6 +765,15 @@ Batch manifests:
         parser.error(
             "--confirm-metaso-minimax-charge is required with "
             "--video-source metaso_minimax"
+        )
+    if (
+        not args.batch_file
+        and args.video_source == "muapi"
+        and stage_requires_materials
+        and not args.confirm_muapi_charge
+    ):
+        parser.error(
+            "--confirm-muapi-charge is required with --video-source muapi"
         )
 
     if args.bgm_file:
@@ -1157,6 +1176,7 @@ def _validate_batch_task_params(
     seedance_charge_confirmed: bool,
     ofox_charge_confirmed: bool,
     metaso_minimax_charge_confirmed: bool,
+    muapi_charge_confirmed: bool,
 ) -> None:
     if not params.video_subject.strip() and not params.video_script.strip():
         raise ValueError("one of video_subject or video_script is required")
@@ -1219,6 +1239,12 @@ def _validate_batch_task_params(
         raise ValueError(
             "--confirm-metaso-minimax-charge is required for Metaso MiniMax H3"
         )
+    if (
+        params.video_source == "muapi"
+        and stop_at in {"materials", "video"}
+        and not muapi_charge_confirmed
+    ):
+        raise ValueError("--confirm-muapi-charge is required for MuAPI video generation")
 
     if stop_at == "subtitle" and not params.subtitle_enabled:
         raise ValueError("stop_at=subtitle cannot be combined with disabled subtitles")
@@ -1332,6 +1358,7 @@ def _build_batch_tasks(args: argparse.Namespace) -> list[VideoParams]:
                 metaso_minimax_charge_confirmed=(
                     args.confirm_metaso_minimax_charge
                 ),
+                muapi_charge_confirmed=args.confirm_muapi_charge,
             )
         except (TypeError, ValueError) as exc:
             raise ValueError(f"invalid batch task {index}: {exc}") from exc

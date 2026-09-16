@@ -176,13 +176,14 @@
 - [x] [Volcano Engine Ark Seedance](https://console.volcengine.com/ark/region:ark+cn-beijing/apikey) をネイティブに統合し、台本の各セグメントから一貫した動画素材を生成可能
 - [x] [WaveSpeed AI](https://wavespeed.ai) によるテキスト動画生成で、台本のキーワードからオリジナル素材を作成可能
 - [x] [OFox](https://ofox.ai) のマルチモデルテキスト動画生成に対応し、1 つの API キーで Seedance、Wan などのモデルを利用可能
+- [x] 非同期の [MuAPI](https://muapi.ai) テキスト動画 API で 3～12 秒の AI 素材を生成し、Endpoint、アスペクト比、解像度、ポーリングを設定可能
 - [x] [OpenAI 互換の画像生成](https://platform.openai.com/docs/guides/image-generation)サービスや独自の画像ゲートウェイを接続し、生成画像を動きのある動画クリップに変換可能
 - [x] クリップの長さ、フレームへの合わせ方、素材の使用順を調整し、アスペクト比や構成に合わせた編集が可能
 
 ### ナレーション・字幕・BGM
 
 - [x] 自動ナレーション、音声ファイルのアップロード、音声なしの 3 つの方式に対応し、音声サンプルとナレーション全体をプレビュー可能
-- [x] **Edge TTS（無料・API キー不要）**、Azure Speech、SiliconFlow、Google Gemini、Xiaomi MiMo、MiniMax、ElevenLabs、Chatterbox、Kokoro、Fish Audio などの音声サービスに対応
+- [x] **Edge TTS（無料・API キー不要）**、Azure Speech、SiliconFlow、Google Gemini、Xiaomi MiMo、MiniMax、ElevenLabs、Chatterbox、Kokoro、Fish Audio、ModelBest VoxCPM などの音声サービスに対応
 - [x] 字幕を自動生成し、フォント、位置、色、サイズ、縁取り、背景スタイルを調整可能
 - [x] ランダム、ローカル、AI 生成の BGM に対応し、音量を個別に調整可能
 
