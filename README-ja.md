@@ -33,12 +33,12 @@
 ## スペシャルサンクス ❤️
 
 <div align="center">
-  <a href="https://platform.kimi.ai?track_id=track-f6b0a640d35c41deb03b247242a1058c&aff=moneyprinterturbo" target="_blank"><img src="https://gcdn.moonshot.cn/growth-cdn/sponsor/kimi-en.png" alt="Kimi sponsors MoneyPrinterTurbo" width="100%"></a>
+  <a href="https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b8de718a76&aff=moneyprinterturbo" target="_blank"><img src="https://gcdn.moonshot.cn/growth-cdn/sponsor/kimi-en.png" alt="Kimi sponsors MoneyPrinterTurbo" width="100%"></a>
 </div>
 
-本プロジェクトをスポンサードしてくださっている [Kimi](https://platform.kimi.ai?track_id=track-f6b0a640d35c41deb03b247242a1058c&aff=moneyprinterturbo) に感謝します！ [Kimi K3](https://www.kimi.com/blog/kimi-k3?aff=moneyprinterturbo) は Moonshot AI の最も高性能なモデルであり、世界初の 3T クラスのオープンモデルです。ネイティブの視覚能力と 100 万トークンのコンテキストウィンドウを備えた K3 は、ナレッジワーク、推論、長期にわたるタスクにおいて最先端の性能を発揮します。MoneyPrinterTurbo では、K3 が台本の作成と、最終的な映像素材を左右する検索キーワードの抽出を担い、動画制作を支えています。内容をより深く理解するほど、より適切な素材が得られます。
+本プロジェクトをスポンサードしてくださっている [Kimi](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b8de718a76&aff=moneyprinterturbo) に感謝します！ [Kimi K3](https://www.kimi.com/blog/kimi-k3?aff=moneyprinterturbo) は Moonshot AI の最も高性能なモデルであり、世界初の 3T クラスのオープンモデルです。ネイティブの視覚能力と 100 万トークンのコンテキストウィンドウを備えた K3 は、ナレッジワーク、推論、長期にわたるタスクにおいて最先端の性能を発揮します。MoneyPrinterTurbo では、K3 が台本の作成と、最終的な映像素材を左右する検索キーワードの抽出を担い、動画制作を支えています。内容をより深く理解するほど、より適切な素材が得られます。
 
-**MoneyPrinterTurbo ユーザー限定特典: 専用リンクから新規登録すると、初回のチャージ成功額の 10% 相当（上限 1,000 元）の API クレジットがボーナスとして付与されます。特典の終了は 2026 年 9 月 30 日です。Kimi オープンプラットフォーム（[中国語サイト](https://platform.kimi.com?track_id=track-2f5441d6ffd84c509dd079d78e9db5dc&aff=moneyprinterturbo) | [グローバル](https://platform.kimi.ai?track_id=track-f6b0a640d35c41deb03b247242a1058c&aff=moneyprinterturbo)）から API をお試しください。**
+**MoneyPrinterTurbo ユーザー限定特典: 専用リンクから新規登録すると、初回のチャージ成功額の 10% 相当（上限 1,000 元）の API クレジットがボーナスとして付与されます。特典の終了は 2026 年 12 月 31 日です。Kimi オープンプラットフォーム（[中国語サイト](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo) | [グローバル](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b8de718a76&aff=moneyprinterturbo)）から API をお試しください。**
 
 <br>
 <table align="center">
@@ -49,15 +49,6 @@
     </td>
     <td align="left">
       本プロジェクトをスポンサードしてくださっている Dola Seed に感謝します！ <a href="https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=MoneyPrinterTurbo&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=MoneyPrinterTurbo">Dola Seed 2.0</a> は、ByteDance がグローバル市場向けに独自開発した全モーダル対応の汎用大規模モデルです。統合マルチモーダルアーキテクチャを基盤とし、テキスト・画像・音声・動画の統合的な理解と生成をサポートします。エージェント連携をネイティブに実現し、推論、長時間タスクの遂行、ツール連携、コーディングにおいて優れた能力を発揮します。こちらのリンクから登録すると、モデルごとに 50 万トークンの無料推論枠が付与されます。
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="120">
-      <a href="https://www.ccsub.net/register?ref=VCVDAWWY"><img src="docs/sponsors/ccsub-logo.png" alt="CCSub" height="36"></a><br>
-      <a href="https://www.ccsub.net/register?ref=VCVDAWWY"><strong>CCSub</strong></a>
-    </td>
-    <td align="left">
-      本プロジェクトをスポンサードしてくださっている <a href="https://www.ccsub.net/register?ref=VCVDAWWY">CCSub</a> に感謝します！ CCSub は安定的で手頃な AI API 中継プラットフォームであり、Claude.ai のサブスクリプションをそのまま置き換えられます。API キー 1 つで Claude Opus 4.8、Sonnet、Haiku、GPT-5、Gemini を直接 API のおよそ 30% のコストで利用でき、世界中どこからでも VPN は不要です。Claude Code、Codex、Cursor、Cline、Continue、Windsurf をはじめとする主要な AI コーディングツールに対応しています。<a href="https://www.ccsub.net/register?ref=VCVDAWWY">www.ccsub.net</a> から登録すると、初回登録時に 5 ドル分の無料クレジットがもらえます。
     </td>
   </tr>
   <tr>
@@ -81,15 +72,14 @@
   </tr>
   <tr>
     <td align="center" width="120">
-      <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar.ai" height="56"></a><br>
-      <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><strong>Infistar.ai</strong></a>
+      <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar.cc" height="56"></a><br>
+      <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
     <td align="left">
-      本プロジェクトをスポンサードしてくださっている <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link">Infistar.ai</a> に感謝します！<br>
-      ⚡ 低コストで信頼性の高いアクセス: 価格は公式レートのわずか 10% から。モデル倍率は透明で、詳細な利用履歴も確認できます。複数プロバイダーへの動的ルーティングにより、レート制限や予期しないサービス中断を回避できます。<br>
-      🧠 台本作成に最適な最先端 LLM: OpenAI、Claude、Google Gemini、DeepSeek、Qwen などの主要モデルを OpenAI 互換 API 経由で利用できます。Infistar.ai は MoneyPrinterTurbo の台本生成と素材キーワード抽出のワークフローに、低レイテンシかつ高並列なサポートを提供します。<br>
-      🎨 最先端のマルチモーダルエコシステム: FLUX、Midjourney、Seedance、Kling、Sora、Luma といった主要な画像・動画生成モデルを利用でき、次世代の AI 動画制作にすぐ活用できます。<br>
-      🎁 MoneyPrinterTurbo ユーザーは、<a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link">専用の紹介リンク</a>から登録し、Infistar.ai が現在提供している限定特典を確認できます。
+      本オープンソースプロジェクトを支援してくださっている <a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link"><strong>Infistar.cc</strong></a> に感謝します！コストパフォーマンスに優れた AI API サービスで、大規模言語モデルは<strong>公式料金の 1% から</strong>、AI 画像生成は<strong>1 枚あたり 0.06 元から</strong>利用できます。<br>
+      <strong>API キー 1 つでテキスト・画像・動画を生成</strong>。GPT、Claude、Gemini、DeepSeek、Qwen、Kling などの主要モデルに対応し、API グループを分ける必要はありません。<br>
+      <strong>全モデルの真正性を検証可能</strong>。料金は透明で、中国での ICP 届出を行っており、人民元でのリアルタイム課金と<strong>法人向けの請求書発行</strong>に対応しています。<br>
+      🎁 MPT 限定特典：<a href="https://infistar.cc/register?aff=6T4EYXP2&amp;ref_source=link">専用リンクから登録</a>すると、<strong>5 米ドル分のトライアルクレジット</strong>と初回チャージの優待を受けられます。
     </td>
   </tr>
   <tr>
@@ -105,28 +95,28 @@
   </tr>
   <tr>
     <td align="center" width="120">
-      <a href="https://fluxionai.space/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=MONEYPRINTERTURBO"><img src="docs/sponsors/fluxionai-logo.png" alt="Fluxion AI" width="120"></a>
+      <a href="https://sidrune.ai/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=moneyprinterturbo"><img src="docs/sponsors/sidrune-logo.png" alt="Sidrune AI" width="120"></a>
     </td>
     <td align="left">
-      本プロジェクトを支援してくださっている <a href="https://fluxionai.space/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=MONEYPRINTERTURBO">Fluxion AI</a> に感謝します！ <strong>世界の主要 AI モデルへのアクセスと管理を、ひとつの窓口で。</strong>個人開発者、技術チーム、企業向けに、統一 API を通じて主要モデルを利用できるプラットフォームです。複数の接続経路を動的に切り替えることで可用性を高め、モデルの性能、応答時間、利用料金を透明に確認できます。モデルや接続経路によって、<strong>API 利用コストを公式料金や基準価格より 40%～98% 削減できます</strong>。<a href="https://fluxionai.space/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=MONEYPRINTERTURBO">専用リンクから登録</a>すると、<strong>3 米ドル分の API クレジット</strong>を受け取れます。
+      本プロジェクトを支援してくださっている <a href="https://sidrune.ai/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=moneyprinterturbo">Sidrune AI</a> に感謝します！ <strong>世界の主要 AI モデルへのアクセスと管理を、ひとつの窓口で。</strong>個人開発者、技術チーム、企業向けに、統一 API を通じて主要モデルを利用・管理できるプラットフォームです。複数の接続経路を動的に切り替えることで可用性を高め、モデルの性能、応答時間、利用料金を透明に確認できます。モデルや接続経路によって、<strong>API 利用コストを公式料金や基準価格より 40%～98% 削減できます</strong>。<a href="https://sidrune.ai/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=moneyprinterturbo">専用リンクから登録</a>すると、<strong>3 米ドル分の API クレジット</strong>を受け取れます。
     </td>
   </tr>
   <tr>
     <td align="center" width="120">
       <a href="https://reccloud.com"><img src="docs/sponsors/reccloud-logo.svg" alt="RecCloud" height="36"></a><br>
-      <a href="https://reccloud.com"><strong>RecCloud</strong></a>
+      <a href="https://reccloud.com">RecCloud</a>
     </td>
     <td align="left">
-      本プロジェクトは<strong>デプロイ</strong>と<strong>利用</strong>にあたって、初心者の方にはややハードルがあります。本プロジェクトをベースにした <code>AI Video Generator</code> サービスを無料で提供してくださっている <a href="https://reccloud.com">RecCloud（AI を活用したマルチメディアサービスプラットフォーム）</a>に、特に感謝いたします。デプロイ不要でオンラインから利用でき、とても便利です。
+      本プロジェクトをベースにした無料の <strong>AI 動画生成ツール</strong>を提供してくださっている <a href="https://reccloud.com">RecCloud（AI マルチメディアプラットフォーム）</a> に感謝します。デプロイ不要でオンラインですぐに使えるため、初心者にも手軽にご利用いただけます。
     </td>
   </tr>
   <tr>
     <td align="center" width="120">
       <a href="https://picwish.com"><img src="docs/sponsors/picwish-logo.svg" alt="Picwish" height="36"></a><br>
-      <a href="https://picwish.com"><strong>Picwish</strong></a>
+      <a href="https://picwish.com">Picwish</a>
     </td>
     <td align="left">
-      本プロジェクトを支援・スポンサードし、継続的な更新とメンテナンスを可能にしてくださっている <a href="https://picwish.com">Picwish</a> に感謝します。Picwish は<strong>画像処理分野</strong>に注力し、複雑な操作を極限まで簡素化する豊富な<strong>画像処理ツール</strong>を提供しており、画像処理を本当に手軽なものにしています。
+      本プロジェクトを支援・スポンサードしてくださっている <a href="https://picwish.com">Picwish</a> に感謝します！Picwish は豊富な<strong>オンライン画像編集ツール</strong>を提供し、さまざまな画像の加工を簡単な操作で行えます。
     </td>
   </tr>
 </table>
@@ -165,7 +155,7 @@
 ### 台本とモデルプロバイダー
 
 - [x] AI による**多言語動画台本**の生成・リライトに加え、独自台本の利用にも対応
-- [x] [Kimi / Moonshot AI](https://platform.kimi.ai?track_id=track-f6b0a640d35c41deb03b247242a1058c&aff=moneyprinterturbo)、[OpenAI](https://platform.openai.com/api-keys)、[Anthropic Claude](https://platform.claude.com/settings/keys)、[Google Gemini](https://aistudio.google.com/app/apikey)、[DeepSeek](https://platform.deepseek.com/api_keys)、[Alibaba Cloud Qwen](https://qwen.ai/apiplatform)、[Microsoft Azure OpenAI](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI)、[ByteDance VolcEngine Ark](https://console.volcengine.com/ark)、[xAI Grok](https://console.x.ai/)、[MiniMax](https://platform.minimax.io/)、[Xiaomi MiMo](https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call) などの主要なモデルサービスに対応
+- [x] [Kimi / Moonshot AI](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b8de718a76&aff=moneyprinterturbo)、[OpenAI](https://platform.openai.com/api-keys)、[Anthropic Claude](https://platform.claude.com/settings/keys)、[Google Gemini](https://aistudio.google.com/app/apikey)、[DeepSeek](https://platform.deepseek.com/api_keys)、[Alibaba Cloud Qwen](https://qwen.ai/apiplatform)、[Microsoft Azure OpenAI](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI)、[ByteDance VolcEngine Ark](https://console.volcengine.com/ark)、[xAI Grok](https://console.x.ai/)、[MiniMax](https://platform.minimax.io/)、[Xiaomi MiMo](https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call) などの主要なモデルサービスに対応
 - [x] [Shengsuan Cloud](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)、[APIMart](https://go.apimart.ai/gh-moneyprinterturbo)、[Cloudflare AI Gateway](https://dash.cloudflare.com/)、[Alibaba ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro)、[AIHubMix](https://aihubmix.com/)、[AIML API](https://aimlapi.com/app/keys)、[EvoLink](https://evolink.ai/dashboard/keys)、[OpenRouter](https://openrouter.ai/settings/keys)、[API Route](https://www.api-route.com/)、[Fluxion AI](https://fluxionai.space/register?source=github&campaign=moneyprinterturbo&promo=MONEYPRINTERTURBO)、[Ollama](https://ollama.com/)、[Claude Code サブスクリプション](https://code.claude.com/docs)、[OneAPI](https://github.com/songquanpeng/one-api)、[LiteLLM](https://docs.litellm.ai/docs/providers)、[Groq](https://console.groq.com/keys)、[Pollinations AI](https://enter.pollinations.ai/) などの統合ゲートウェイ、集約サービス、ローカルランタイムに対応
 
 ### 動画・画像素材
@@ -250,8 +240,9 @@
 ### おすすめの手順
 
 - 手動でのインストールや設定をしたくない場合: AI エージェントで動画を生成する
+- Python がインストール済みで、すぐに使いたい場合: [pip で公式パッケージをインストール](#pip-で公式パッケージをインストール)
 - Windows ユーザー: まずはワンクリックパッケージを使うのが最短で試せます
-- macOS / Linux ユーザー: ローカル環境の主要な手順として `uv` を使用します
+- ソースコードからのデプロイや開発: `uv` で環境と依存関係を管理します
 - より独立した実行環境が欲しい場合: Docker でデプロイします
 
 ### AI エージェントで動画を生成する
@@ -289,7 +280,57 @@ GitHub Releases から最新の Windows 用ワンクリックパッケージを�
 
 ## インストールとデプロイ 📥
 
-### 前提条件
+### pip で公式パッケージをインストール
+
+公式の PyPI パッケージ名は **[mpt](https://pypi.org/project/mpt/)** で、`harry0703` が管理しています。
+PyPI 上の `MoneyPrinterTurbo` という名前のパッケージは第三者が管理しています。
+
+リポジトリのクローンは不要です。Python 3.11 以降が必要で、Python 3.11 を推奨します。
+
+**① 仮想環境を作成して有効化する**
+
+macOS / Linux:
+
+```shell
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+**② インストールして起動する**
+
+```shell
+python -m pip install mpt
+mpt webui
+```
+
+WebUI がブラウザーで自動的に開きます。
+ポートを指定し、ブラウザーを開かずに実行する場合は `mpt webui --port 8503 --headless` を使用してください。
+CLI での動画生成については `mpt cli --help` を参照してください。
+
+**③ サービスを設定し、保存先を確認する**
+
+初回起動時に `config.toml` が自動作成されます。
+オンラインのモデル、素材、音声サービスを利用する前に、WebUI の基本設定で必要な API キーを入力してください。
+インストール版の設定と生成ファイルは、既定では以下の場所に保存されます:
+
+| OS | データディレクトリ |
+| --- | --- |
+| macOS | `~/Library/Application Support/MoneyPrinterTurbo` |
+| Windows | `%LOCALAPPDATA%\MoneyPrinterTurbo` |
+| Linux | `~/.local/share/MoneyPrinterTurbo` または `$XDG_DATA_HOME/MoneyPrinterTurbo` |
+
+起動前に `MPT_HOME` を設定すると、保存先を変更できます。
+生成された動画は、そのディレクトリ内の `storage/tasks` に保存されます。
+更新するには仮想環境を有効化して `python -m pip install --upgrade mpt` を実行してください。
+
+### ソースコードからデプロイする場合の前提条件
 
 - ローカル環境へのデプロイには Python 3.11 以降が必要です
 - Windows では、プロジェクトのパスに非 ASCII 文字、特殊文字、スペースを含めないでください

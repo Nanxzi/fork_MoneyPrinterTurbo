@@ -1,6 +1,8 @@
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,12 +14,108 @@ from app.services import subtitle
 
 
 class TestSubtitleService(unittest.TestCase):
+    def test_concurrent_subtitles_initialize_whisper_once(self):
+        """Concurrent jobs must not load the large Whisper model twice."""
+        first_constructor_started = threading.Event()
+        release_constructor = threading.Event()
+        second_constructor_started = threading.Event()
+        constructor_calls = []
+
+        class FakeWhisperModel:
+            def __init__(self, **_kwargs):
+                constructor_calls.append(1)
+                if len(constructor_calls) == 1:
+                    first_constructor_started.set()
+                else:
+                    second_constructor_started.set()
+                release_constructor.wait(timeout=2)
+
+            def transcribe(self, _audio_file, **_kwargs):
+                return [], SimpleNamespace(language="en", language_probability=1.0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch.object(subtitle, "model", None),
+                patch.object(subtitle, "WhisperModel", FakeWhisperModel),
+            ):
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    first = executor.submit(
+                        subtitle.create, "audio-1.mp3", str(Path(temp_dir) / "1.srt")
+                    )
+                    self.assertTrue(first_constructor_started.wait(timeout=1))
+                    second = executor.submit(
+                        subtitle.create, "audio-2.mp3", str(Path(temp_dir) / "2.srt")
+                    )
+                    try:
+                        duplicate_load = second_constructor_started.wait(timeout=0.2)
+                    finally:
+                        release_constructor.set()
+                    first.result(timeout=2)
+                    second.result(timeout=2)
+
+        self.assertFalse(duplicate_load, "Whisper was loaded twice")
+        self.assertEqual(len(constructor_calls), 1)
+
     def test_file_to_subtitles_returns_empty_for_missing_input(self):
         """空路径和不存在的文件都应安全返回空列表。"""
         self.assertEqual(subtitle.file_to_subtitles(""), [])
         with tempfile.TemporaryDirectory() as tmp_dir:
             missing_file = Path(tmp_dir) / "missing.srt"
             self.assertEqual(subtitle.file_to_subtitles(str(missing_file)), [])
+
+    def test_transcribe_audio_bytes_returns_editable_text_and_cleans_temps(self):
+        temporary_paths = []
+
+        def fake_create(audio_file, subtitle_file, word_level=False, log_details=True):
+            self.assertFalse(word_level)
+            self.assertFalse(log_details)
+            temporary_paths.extend([Path(audio_file), Path(subtitle_file)])
+            self.assertEqual(Path(audio_file).read_bytes(), b"wav-audio")
+            Path(subtitle_file).write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\n第一句\n\n"
+                "2\n00:00:01,000 --> 00:00:02,000\nOpen A I\n\n",
+                encoding="utf-8",
+            )
+
+        with patch.object(subtitle, "create", side_effect=fake_create):
+            transcript = subtitle.transcribe_audio_bytes(b"wav-audio")
+
+        self.assertEqual(transcript, "第一句 Open A I")
+        self.assertTrue(all(not path.exists() for path in temporary_paths))
+
+    def test_transcribe_audio_bytes_returns_empty_when_whisper_fails(self):
+        with patch.object(subtitle, "create", return_value=""):
+            self.assertEqual(subtitle.transcribe_audio_bytes(b"wav-audio"), "")
+
+    def test_create_can_hide_sensitive_paths_and_recognized_text(self):
+        class _FakeWhisperModel:
+            def __init__(self, **_kwargs):
+                pass
+
+            def transcribe(self, _audio_file, **_kwargs):
+                word = SimpleNamespace(start=0.0, end=0.5, word="private transcript.")
+                segment = SimpleNamespace(start=0.0, end=0.5, words=[word])
+                info = SimpleNamespace(language="en", language_probability=0.99)
+                return [segment], info
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subtitle_file = Path(tmp_dir) / "private-reference.srt"
+            with (
+                patch.object(subtitle, "model", None),
+                patch.object(subtitle, "WhisperModel", _FakeWhisperModel),
+                patch.object(subtitle.logger, "info") as info,
+                patch.object(subtitle.logger, "debug") as debug,
+            ):
+                subtitle.create(
+                    str(Path(tmp_dir) / "private-reference.wav"),
+                    str(subtitle_file),
+                    log_details=False,
+                )
+
+        logged = " ".join(str(call) for call in info.call_args_list)
+        self.assertNotIn("private-reference", logged)
+        self.assertNotIn("private transcript", logged)
+        debug.assert_not_called()
 
     def test_levenshtein_distance_and_similarity_cover_common_boundaries(self):
         """
@@ -81,6 +179,56 @@ class TestSubtitleService(unittest.TestCase):
 
         self.assertEqual([item[2] for item in items], ["Hello world", "Again"])
 
+    def test_create_preserves_numeric_punctuation_and_sentence_timing(self):
+        words = [
+            SimpleNamespace(start=0.0, end=0.2, word="Value"),
+            SimpleNamespace(start=0.2, end=0.5, word=" 3.14"),
+            SimpleNamespace(start=0.5, end=0.8, word=" costs"),
+            SimpleNamespace(start=0.8, end=1.1, word=" 1,000"),
+            SimpleNamespace(start=1.1, end=1.4, word=" dollars."),
+            SimpleNamespace(start=1.5, end=1.8, word="Next!"),
+        ]
+        fake_model = SimpleNamespace(
+            transcribe=lambda *_args, **_kwargs: (
+                [SimpleNamespace(start=0.0, end=1.8, words=words)],
+                SimpleNamespace(language="en", language_probability=0.99),
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "numeric.srt"
+            with patch.object(subtitle, "model", fake_model), patch.object(
+                subtitle, "WhisperModel", object()
+            ):
+                subtitle.create("audio.mp3", str(output))
+            items = subtitle.file_to_subtitles(str(output))
+        self.assertEqual(
+            items,
+            [
+                (1, "00:00:00,000 --> 00:00:01,400", "Value 3.14 costs 1,000 dollars"),
+                (2, "00:00:01,500 --> 00:00:01,800", "Next"),
+            ],
+        )
+
+    def test_create_removes_only_trailing_sentence_punctuation(self):
+        words = [
+            SimpleNamespace(start=0.0, end=0.3, word="3.14?!"),
+            SimpleNamespace(start=0.4, end=0.7, word="1,000"),
+        ]
+        fake_model = SimpleNamespace(
+            transcribe=lambda *_args, **_kwargs: (
+                [SimpleNamespace(start=0.0, end=0.7, words=words)],
+                SimpleNamespace(language="en", language_probability=0.99),
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "suffix.srt"
+            with patch.object(subtitle, "model", fake_model), patch.object(
+                subtitle, "WhisperModel", object()
+            ):
+                subtitle.create("audio.mp3", str(output))
+            items = subtitle.file_to_subtitles(str(output))
+        self.assertEqual([item[2] for item in items], ["3.14", "1,000"])
+
     def test_create_word_level_writes_each_whisper_word_with_its_timing(self):
         """逐词模式应保留 Whisper 的每个词及其独立起止时间。"""
         transcribe_kwargs = {}
@@ -119,6 +267,37 @@ class TestSubtitleService(unittest.TestCase):
         self.assertIs(transcribe_kwargs["vad_filter"], True)
         self.assertIn("00:00:00,100 --> 00:00:00,400", items[0][1])
         self.assertIn("00:00:00,400 --> 00:00:00,800", items[1][1])
+
+    def test_create_falls_back_to_segment_when_word_alignment_is_missing(self):
+        """Whisper may return a segment with no aligned words in either mode."""
+
+        class FakeWhisperModel:
+            def __init__(self, **_kwargs):
+                pass
+
+            def transcribe(self, _audio_file, **_kwargs):
+                segments = [
+                    SimpleNamespace(start=0.1, end=0.8, text="Hello", words=None),
+                    SimpleNamespace(start=0.9, end=1.4, text="world", words=[]),
+                ]
+                info = SimpleNamespace(language="en", language_probability=0.99)
+                return segments, info
+
+        for word_level in (False, True):
+            with self.subTest(word_level=word_level):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    subtitle_file = Path(tmp_dir) / "unaligned.srt"
+                    with (
+                        patch.object(subtitle, "model", None),
+                        patch.object(subtitle, "WhisperModel", FakeWhisperModel),
+                    ):
+                        subtitle.create(
+                            "audio.mp3", str(subtitle_file), word_level=word_level
+                        )
+                    items = subtitle.file_to_subtitles(str(subtitle_file))
+
+                self.assertEqual([item[2] for item in items], ["Hello", "world"])
+                self.assertIn("00:00:00,100 --> 00:00:00,800", items[0][1])
 
     def test_correct_ignores_markdown_separator_lines(self):
         """
@@ -173,6 +352,22 @@ class TestSubtitleService(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0][1], "00:00:00,100 --> 00:00:02,000")
         self.assertEqual(items[0][2], "Hello world")
+
+    def test_correct_removes_transcription_after_script_ends(self):
+        """Whisper's trailing hallucinations must not appear as final captions."""
+        original_srt = (
+            "1\n00:00:00,100 --> 00:00:01,000\nHello world\n\n"
+            "2\n00:00:01,000 --> 00:00:02,000\nUnspoken words\n\n"
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subtitle_file = Path(tmp_dir) / "subtitle.srt"
+            subtitle_file.write_text(original_srt, encoding="utf-8")
+
+            subtitle.correct(str(subtitle_file), "Hello world")
+            items = subtitle.file_to_subtitles(str(subtitle_file))
+
+        self.assertEqual([item[2] for item in items], ["Hello world"])
 
     def test_correct_replaces_mismatch_and_appends_missing_script_line(self):
         """
@@ -237,6 +432,36 @@ class TestSubtitleService(unittest.TestCase):
             items = subtitle.file_to_subtitles(str(subtitle_file))
 
         self.assertEqual([item[2] for item in items], ["Hello", "World"])
+
+    def test_file_to_subtitles_preserves_timestamps_in_cue_text(self):
+        """Timestamp examples in narration must not replace a cue's timing."""
+        for text in (
+            "Jump to 00:01:23,456 in the recording.",
+            "00:01:23,456",
+            "00:01:23,456 --> 00:01:24,000",
+        ):
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as tmp_dir:
+                subtitle_file = Path(tmp_dir) / "subtitle.srt"
+                subtitle_file.write_text(
+                    "1\n00:00:00,000 --> 00:00:02,000\n"
+                    f"Timestamp example:\n{text}\nContinue watching.\n\n"
+                    "2\n00:00:02,000 --> 00:00:03,000\nNext cue",
+                    encoding="utf-8",
+                )
+
+                items = subtitle.file_to_subtitles(str(subtitle_file))
+
+                self.assertEqual(
+                    items,
+                    [
+                        (
+                            1,
+                            "00:00:00,000 --> 00:00:02,000",
+                            f"Timestamp example:\n{text}\nContinue watching.",
+                        ),
+                        (2, "00:00:02,000 --> 00:00:03,000", "Next cue"),
+                    ],
+                )
 
 
 if __name__ == "__main__":

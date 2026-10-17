@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from collections.abc import Mapping
@@ -44,6 +45,7 @@ from app.models.schema import (
     VideoTransitionMode,
 )
 from app.services import bgm as bgm_service
+from app.services import material_upload as material_upload_service
 from app.services import (
     cache_manager,
     llm,
@@ -52,6 +54,7 @@ from app.services import (
     metaso_minimax,
     muapi,
     ofox,
+    subtitle,
     video,
     volcengine_seedance,
     voice,
@@ -88,8 +91,8 @@ style_file = Path(__file__).with_name("styles.css")
 streamlit_style = f"<style>{style_file.read_text(encoding='utf-8')}</style>"
 st.markdown(streamlit_style, unsafe_allow_html=True)
 # 定义资源目录
-font_dir = os.path.join(root_dir, "resource", "fonts")
-song_dir = os.path.join(root_dir, "resource", "songs")
+font_dir = utils.font_dir()
+song_dir = utils.song_dir()
 i18n_dir = os.path.join(root_dir, "webui", "i18n")
 config_file = os.path.join(root_dir, "webui", ".streamlit", "webui.toml")
 # 语言列表必须在会话状态初始化前可用，首次访问时才能把浏览器 locale 映射到
@@ -104,6 +107,14 @@ DEFAULT_KOKORO_MODEL = "kokoro"
 DEFAULT_KOKORO_VOICES: list[str] = []
 DEFAULT_VOXCPM_BASE_URL = voice.VOXCPM_DEFAULT_BASE_URL
 DEFAULT_VOXCPM_VOICE = voice.VOXCPM_DEFAULT_VOICE
+VOXCPM_REFERENCE_AUDIO_SESSION_KEY = "voxcpm_reference_audio"
+VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY = "voxcpm_reference_audio_error"
+VOXCPM_PROMPT_AUDIO_SESSION_KEY = "voxcpm_prompt_audio"
+VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY = "voxcpm_prompt_audio_error"
+VOXCPM_PROMPT_TEXT_SESSION_KEY = "voxcpm_prompt_text_input"
+VOXCPM_HIGH_FIDELITY_SESSION_KEY = "voxcpm_high_fidelity_enabled"
+VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY = "voxcpm_separate_prompt_audio_enabled"
+VOXCPM_PROMPT_EXAMPLE_MODE_SESSION_KEY = "voxcpm_prompt_example_mode"
 ONBOARDING_TOUR_KEY = "mpt-onboarding-v1"
 CUSTOM_LLM_ENDPOINT_ID = "custom"
 VOICE_MODE_TTS = "tts"
@@ -193,16 +204,7 @@ DEFAULT_SUBTITLE_SETTINGS = {
     "subtitle_background_color": "#000000",
     "rounded_subtitle_background": False,
 }
-LOCAL_MATERIAL_EXTENSIONS = {
-    ".mp4",
-    ".mov",
-    ".avi",
-    ".flv",
-    ".mkv",
-    ".jpg",
-    ".jpeg",
-    ".png",
-}
+LOCAL_MATERIAL_EXTENSIONS = set(material_upload_service.SUPPORTED_MATERIAL_EXTENSIONS)
 CUSTOM_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
 _FINAL_VIDEO_PATTERN = re.compile(
     r"^final-(?P<index>\d+)\.(?P<extension>mp4|mov|mkv|webm)$",
@@ -244,6 +246,9 @@ SETTINGS_PRESET_FILE_NAME = "moneyprinterturbo-settings.json"
 KEY_BACKUP_SCHEMA = "moneyprinterturbo.key-backup"
 KEY_BACKUP_VERSION = 1
 KEY_BACKUP_FILE_NAME = "moneyprinterturbo-keys.json"
+# Export files contain only settings or credentials, not media. Reject oversized
+# uploads before decoding and parsing them in the Streamlit process.
+MAX_SETTINGS_TRANSFER_BYTES = 2 * 1024 * 1024
 # 预设只描述生成参数。素材、配音和配乐都是本机文件路径，预设通常要在另一台
 # 机器或另一个容器里导入，带上这些路径只会指向不存在的文件。
 PRESET_EXCLUDED_PARAM_KEYS = frozenset(
@@ -329,10 +334,11 @@ def _save_runtime_config():
     return saved
 
 
-def _saved_ui_choice(key, options, default):
+def _saved_ui_choice(key, options, default, section=None):
     """读取一个持久化选择，并把旧配置或手工编辑的非法值降级为默认值。"""
     options = list(options)
-    saved = config.ui.get(key, default)
+    section = config.ui if section is None else section
+    saved = section.get(key, default)
     numeric_default = isinstance(default, (int, float)) and not isinstance(
         default, bool
     )
@@ -604,6 +610,43 @@ def _build_uploaded_file_path(uploaded_file, target_dir, allowed_extensions, pre
     return file_path
 
 
+def _save_uploaded_local_materials(uploaded_files):
+    """Validate a WebUI material batch and undo earlier files on failure."""
+    local_videos_dir = utils.storage_dir("local_videos", create=True)
+    materials = []
+    persisted = []
+    saved_paths = []
+    try:
+        for uploaded_file in uploaded_files:
+            stored_name = material_upload_service.save_material_upload(
+                uploaded_file.name, uploaded_file
+            )
+            file_path = os.path.join(local_videos_dir, stored_name)
+            saved_paths.append(file_path)
+            material_info = MaterialInfo()
+            material_info.provider = "local"
+            material_info.url = file_path
+            materials.append(material_info)
+            persisted.append(
+                {
+                    "provider": material_info.provider,
+                    "url": material_info.url,
+                    "duration": material_info.duration,
+                }
+            )
+    except Exception:
+        for file_path in saved_paths:
+            try:
+                os.remove(file_path)
+            except OSError as exc:
+                logger.warning(
+                    f"failed to remove local material after batch error: "
+                    f"path={file_path}, error={exc}"
+                )
+        raise
+    return materials, persisted
+
+
 def _initialize_session_state():
     """集中初始化跨 rerun 保留的页面状态。"""
     if not st.session_state.get("cross_post_recovery_checked"):
@@ -762,7 +805,11 @@ def _safe_load_task_script(task_path):
 
     try:
         with open(script_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            payload = json.load(f)
+        if not isinstance(payload, dict):
+            logger.warning(f"task script data is not an object: {script_file}")
+            return {}
+        return payload
     except Exception as e:
         logger.warning(f"failed to read task script data: {script_file}, {e}")
         return {}
@@ -783,7 +830,7 @@ def _find_final_task_video(task_path: str) -> str:
     candidates = []
     for file_name in files:
         match = _FINAL_VIDEO_PATTERN.fullmatch(file_name)
-        if match:
+        if match and os.path.isfile(os.path.join(task_path, file_name)):
             candidates.append((int(match.group("index")), file_name))
 
     if not candidates:
@@ -955,11 +1002,16 @@ def _scan_history_tasks(limit=30):
     tasks = []
     for mtime, name, task_path in task_entries[:limit]:
         script_data = _safe_load_task_script(task_path)
-        params_data = script_data.get("params", {}) if script_data else {}
+        params_data = script_data.get("params", {})
+        if not isinstance(params_data, dict):
+            params_data = {}
+        script_text = script_data.get("script", "")
+        if not isinstance(script_text, str):
+            script_text = ""
         video_file = _find_final_task_video(task_path)
         subject = (
             params_data.get("video_subject")
-            or script_data.get("script", "")[:40]
+            or script_text[:40]
             or name
         )
         tasks.append(
@@ -980,12 +1032,28 @@ def _scan_history_tasks(limit=30):
 
 def _collect_task_summaries(limit=20):
     history_tasks = {task["task_id"]: task for task in _scan_history_tasks(limit=50)}
+    active_tasks = _active_generation_tasks()
 
     try:
         runtime_tasks, _ = sm.state.get_all_tasks(1, 50)
     except Exception as e:
         logger.warning(f"failed to load runtime tasks: {e}")
         runtime_tasks = []
+
+    # The paginated state view can omit this session's newer tasks after 50
+    # older records. Read those active IDs directly so a completed or failed
+    # task cannot remain labelled as processing forever.
+    runtime_ids = {task.get("task_id") for task in runtime_tasks}
+    for task_id in active_tasks:
+        if task_id in runtime_ids:
+            continue
+        try:
+            task = sm.state.get_task(task_id)
+        except Exception as e:
+            logger.warning(f"failed to load active task {task_id}: {e}")
+            continue
+        if task:
+            runtime_tasks.append(task)
 
     for task in runtime_tasks:
         task_id = task.get("task_id", "")
@@ -1004,6 +1072,16 @@ def _collect_task_summaries(limit=20):
             or (task.get("script", "")[:40] if task.get("script") else "")
             or task_id
         )
+        task_mtime = active_tasks.get(task_id, {}).get("mtime") or history_task.get(
+            "mtime", 0
+        )
+        if os.path.isdir(task_path):
+            try:
+                task_mtime = os.path.getmtime(task_path)
+            except OSError:
+                # Another session can delete this directory between isdir and
+                # getmtime. Keep rendering the persisted task state.
+                pass
 
         history_tasks[task_id] = {
             "task_id": task_id,
@@ -1011,15 +1089,13 @@ def _collect_task_summaries(limit=20):
             "state": task.get("state"),
             "cross_post_state": task.get("cross_post_state"),
             "progress": int(task.get("progress", 0) or 0),
-            "mtime": os.path.getmtime(task_path)
-            if os.path.isdir(task_path)
-            else history_task.get("mtime", 0),
+            "mtime": task_mtime,
             "task_path": task_path,
             "video_file": video_file,
             "source": "runtime",
         }
 
-    for task_id, active_task in _active_generation_tasks().items():
+    for task_id, active_task in active_tasks.items():
         history_task = history_tasks.get(task_id, {})
         if history_task and _task_state_filter_key(history_task) in {
             "complete",
@@ -1131,10 +1207,12 @@ def _delete_task(task_id, task_path, task_state=None):
         return False
 
     try:
-        if hasattr(sm.state, "delete_task"):
-            sm.state.delete_task(task_id)
         if os.path.isdir(normalized_path):
             shutil.rmtree(normalized_path)
+        # Keep the persisted task available for retry when file removal fails
+        # (for example, a video is still locked by another process on Windows).
+        if hasattr(sm.state, "delete_task"):
+            sm.state.delete_task(task_id)
         logger.info(f"deleted task: {task_id}")
         return True
     except Exception as e:
@@ -1564,6 +1642,16 @@ def _apply_restored_params(params):
     # 同时清空当前页面已缓存的上传素材，避免恢复后误用另一个任务的文件。
     st.session_state["local_video_materials"] = []
     st.session_state.pop("custom_audio_file_uploader", None)
+    st.session_state.pop("voxcpm_reference_audio_uploader", None)
+    st.session_state.pop(VOXCPM_REFERENCE_AUDIO_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY, None)
+    st.session_state.pop("voxcpm_prompt_audio_uploader", None)
+    st.session_state.pop(VOXCPM_PROMPT_AUDIO_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_PROMPT_TEXT_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_HIGH_FIDELITY_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_PROMPT_EXAMPLE_MODE_SESSION_KEY, None)
     st.session_state.pop("custom_bgm_uploader", None)
     st.session_state.pop("custom_bgm_validation", None)
     st.session_state["task_restore_upload_requirements"] = (
@@ -1741,11 +1829,18 @@ def _render_top_bar():
                     # 写入 config.toml，后续新会话将优先使用该明确选择。
                     _set_runtime_config("ui", "language", selected_language_code)
                     _save_runtime_config()
+                    # 切换语言会先重跑顶部栏，正文控件尚未渲染就触发 rerun。
+                    # 显式保留本次创作内容，防止 Streamlit 清理旧控件状态后，
+                    # 新语言页面把已经输入的主题、文案和关键词重置为空。
+                    for content_key in ("video_subject", "video_script", "video_terms"):
+                        if content_key in st.session_state:
+                            st.session_state[content_key] = st.session_state[content_key]
                     # 切换语言后强制刷新，避免 selectbox 继续展示旧语言文案。
                     st.rerun()
 
 
 support_locales = [
+    "ca-ES",
     "zh-CN",
     "zh-HK",
     "zh-TW",
@@ -1774,7 +1869,9 @@ def get_all_fonts():
     for root, dirs, files in os.walk(font_dir):
         for file in files:
             if file.endswith(".ttf") or file.endswith(".ttc"):
-                fonts.append(file)
+                # Keep each option tied to its file, including nested fonts.
+                relative_path = os.path.relpath(os.path.join(root, file), font_dir)
+                fonts.append(relative_path.replace(os.sep, "/"))
     fonts.sort()
     return fonts
 
@@ -1797,7 +1894,7 @@ def open_task_folder(task_id):
         # 通过路径拼接访问任务目录之外的位置，也避免后续打开目录时触发
         # 平台 shell 对特殊字符的解释。
         normalized_task_id = str(UUID(str(task_id)))
-        tasks_root = os.path.abspath(os.path.join(root_dir, "storage", "tasks"))
+        tasks_root = os.path.abspath(utils.task_dir())
         path = os.path.abspath(os.path.join(tasks_root, normalized_task_id))
 
         # 即使 UUID 校验通过，也再次确认最终路径仍在任务根目录内，避免
@@ -1928,20 +2025,21 @@ def _render_generation_task_snapshot(task_id, task):
         _render_generation_logs(task_id)
         return
 
+    video_files = task.get("videos") or []
     if state == const.TASK_STATE_FAILED:
         error = str(task.get("error") or "").strip()
         message = tr("Video Generation Failed")
         st.error(f"{message}: {error}" if error else message)
-        _render_generation_logs(task_id)
-        return
-
-    video_files = task.get("videos") or []
-    if state != const.TASK_STATE_COMPLETE or not video_files:
+        if not video_files:
+            _render_generation_logs(task_id)
+            return
+    elif state != const.TASK_STATE_COMPLETE or not video_files:
         st.error(tr("Video Generation Failed"))
         _render_generation_logs(task_id)
         return
 
-    st.success(tr("Video Generation Completed"))
+    if state == const.TASK_STATE_COMPLETE:
+        st.success(tr("Video Generation Completed"))
     for warning in task.get("warnings") or []:
         if isinstance(warning, Mapping) and warning.get("code") == "batch_materials_reused":
             st.warning(
@@ -1967,37 +2065,46 @@ def _render_generation_task_snapshot(task_id, task):
         else:
             st.warning(str(warning))
 
-    try:
-        player_cols = st.columns(len(video_files) * 2 + 1)
-        for i, url in enumerate(video_files):
-            with player_cols[i * 2 + 1]:
-                st.video(url)
-                if not os.path.isfile(url):
-                    logger.warning(
-                        f"generated video is unavailable for download: "
-                        f"task_id={task_id}, video_file={url}"
-                    )
-                    continue
+    available_videos = [
+        (index, url)
+        for index, url in enumerate(video_files)
+        if os.path.isfile(url)
+    ]
+    for index, url in enumerate(video_files):
+        if os.path.isfile(url):
+            continue
+        logger.warning(
+            f"generated video is unavailable: "
+            f"task_id={task_id}, video_file={url}"
+        )
 
-                download_label = tr("Download Video")
-                if len(video_files) > 1:
-                    download_label = f"{download_label} {i + 1}"
-                download_name = _build_video_download_name(
-                    task.get("video_subject"),
-                    i + 1,
-                    len(video_files),
-                )
-                with open(url, "rb") as video_file:
-                    st.download_button(
-                        download_label,
-                        data=video_file,
-                        file_name=download_name,
-                        mime=mimetypes.guess_type(url)[0] or "video/mp4",
-                        key=f"download_generated_video_{task_id}_{i}",
-                        icon=":material/download:",
-                        on_click="ignore",
-                        use_container_width=True,
+    try:
+        if not available_videos:
+            st.warning(tr("Generated Video Files Unavailable"))
+        else:
+            player_cols = st.columns(len(available_videos) * 2 + 1)
+            for player_index, (video_index, url) in enumerate(available_videos):
+                with player_cols[player_index * 2 + 1]:
+                    st.video(url)
+                    download_label = tr("Download Video")
+                    if len(video_files) > 1:
+                        download_label = f"{download_label} {video_index + 1}"
+                    download_name = _build_video_download_name(
+                        task.get("video_subject"),
+                        video_index + 1,
+                        len(video_files),
                     )
+                    with open(url, "rb") as video_file:
+                        st.download_button(
+                            download_label,
+                            data=video_file,
+                            file_name=download_name,
+                            mime=mimetypes.guess_type(url)[0] or "video/mp4",
+                            key=f"download_generated_video_{task_id}_{video_index}",
+                            icon=":material/download:",
+                            on_click="ignore",
+                            use_container_width=True,
+                        )
     except Exception as exc:
         logger.exception(
             f"failed to render generated video preview: task_id={task_id}, "
@@ -2005,7 +2112,10 @@ def _render_generation_task_snapshot(task_id, task):
         )
 
     _render_generation_logs(task_id)
-    if st.session_state.get("handled_generation_task_id") != task_id:
+    if (
+        state == const.TASK_STATE_COMPLETE
+        and st.session_state.get("handled_generation_task_id") != task_id
+    ):
         # Fragment 可能重复渲染同一个完成任务。无论是否开启自动打开目录，
         # 每个任务都只处理一次完成事件，避免重复弹出资源管理器或重复写入日志。
         st.session_state["handled_generation_task_id"] = task_id
@@ -2588,14 +2698,42 @@ def _format_file_size(size_bytes):
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _get_video_cache_stats(max_age_days=None):
+def _get_video_cache_stats_data(max_age_days=None):
     """
     短周期缓存目录统计，避免设置弹窗内普通控件交互反复扫描大量文件。
 
     缓存键包含清理天数，因此切换范围只会为每个范围扫描一次；主动刷新或清理
     完成后会显式清空，最多 30 秒的缓存不会影响实际删除时的二次扫描。
+
+    这里只缓存纯 dict，而不是 VideoCacheStats 实例：st.cache_data 需要用 pickle
+    序列化返回值，而 pickle 保存自定义类时按「模块名 + 类名」引用，并校验解析
+    出来的类与实例的类是同一个对象。Streamlit 源码监视器在本地源码文件发生变化
+    时（包含 Windows 上防病毒或索引器引起的偶发事件）会清空 sys.modules 中的
+    被监视模块并重新导入；此时仍打开的设置弹窗（Dialog 继承 fragment 行为，
+    内部交互不会重建 Main.py 顶层引用）持有的还是旧模块里的类，pickle 会抛
+    PicklingError: it's not the same object as ...，并被 Streamlit 包装成
+    UnserializableReturnValueError（对应 Streamlit 官方 issue #14593 的已知缺陷）。
+    纯 dict 按值序列化、不含类引用，因此不受模块重新导入影响。
     """
-    return cache_manager.get_video_cache_stats(max_age_days=max_age_days)
+    stats = cache_manager.get_video_cache_stats(max_age_days=max_age_days)
+    # 字段名与 VideoCacheStats 完全一致，供下方 _get_video_cache_stats 直接展开
+    # 还原；今后若 VideoCacheStats 增删字段，需要同步维护这里的字段映射。
+    return {
+        "file_count": stats.file_count,
+        "total_size": stats.total_size,
+        "oldest_mtime": stats.oldest_mtime,
+        "newest_mtime": stats.newest_mtime,
+    }
+
+
+def _get_video_cache_stats(max_age_days=None) -> cache_manager.VideoCacheStats:
+    """在缓存边界之外把纯数据还原为 VideoCacheStats，调用方属性访问方式不变。"""
+
+    # 还原时使用当前生效的 cache_manager 模块；即使模块被重新导入，也只是重建
+    # 一个轻量 dataclass，不会再触发 pickle 的「类引用身份」校验。
+    return cache_manager.VideoCacheStats(
+        **_get_video_cache_stats_data(max_age_days=max_age_days)
+    )
 
 
 def _render_cache_management_settings(panel):
@@ -2659,7 +2797,7 @@ def _render_cache_management_settings(panel):
             use_container_width=True,
             icon=":material/refresh:",
         ):
-            _get_video_cache_stats.clear()
+            _get_video_cache_stats_data.clear()
             st.rerun(scope="fragment")
 
         if open_col.button(
@@ -2697,7 +2835,7 @@ def _render_cache_management_settings(panel):
             # nonce 让下一次 fragment rerun 创建未勾选的新控件，避免清理完成后
             # 危险确认状态被继续保留。
             st.session_state["video_cache_cleanup_confirm_nonce"] = confirm_nonce + 1
-            _get_video_cache_stats.clear()
+            _get_video_cache_stats_data.clear()
             st.rerun(scope="fragment")
 
 
@@ -2795,6 +2933,8 @@ def _load_transfer_payload(raw_bytes, schema, version):
     提示停留在导入入口，而不是把无法识别的内容写进配置或控件状态。
     Windows 编辑器可能保存带 BOM 的 JSON，因此按 utf-8-sig 解码。
     """
+    if len(raw_bytes) > MAX_SETTINGS_TRANSFER_BYTES:
+        raise ValueError("settings import exceeds the 2 MB limit")
     payload = json.loads(raw_bytes.decode("utf-8-sig"))
     if not isinstance(payload, dict):
         raise ValueError("exported file must contain a JSON object")
@@ -3439,6 +3579,16 @@ def _render_settings_dialog():
                         field.default_value,
                     ),
                 )
+
+            if llm_provider == "kimi_code" and middle_config_panel.open:
+                from app.services import kimi_code_oauth
+                from webui.kimi_login import render_kimi_login
+
+                # 给嵌套 fragment 独立的容器，轮询重绘不占用后续控件的位置。
+                with llm_form_panel.container():
+                    render_kimi_login(
+                        kimi_code_oauth.resolve_region(st_llm_base_url), tr
+                    )
 
             if llm_form_panel.button(
                 tr("Test LLM Connection"),
@@ -5323,6 +5473,34 @@ def _render_video_settings(panel, params):
             else:
                 _set_runtime_config("app", "video_codec", selected_video_codec)
 
+            concurrency_options = [1, 2, 4, 6, 8]
+            if params.video_source in {"pexels", "pixabay", "coverr"}:
+                selected_material_concurrency = stable_selectbox(
+                    tr("Material Concurrency"),
+                    options=concurrency_options,
+                    default_value=_saved_ui_choice(
+                        "material_concurrency", concurrency_options, 1, config.app
+                    ),
+                    key="material_concurrency_select",
+                    help=tr("Material Concurrency Help"),
+                )
+                _set_runtime_config(
+                    "app", "material_concurrency", selected_material_concurrency
+                )
+
+            selected_clip_concurrency = stable_selectbox(
+                tr("Clip Rendering Concurrency"),
+                options=concurrency_options,
+                default_value=_saved_ui_choice(
+                    "video_clip_concurrency", concurrency_options, 1, config.app
+                ),
+                key="clip_rendering_concurrency_select",
+                help=tr("Clip Rendering Concurrency Help"),
+            )
+            _set_runtime_config(
+                "app", "video_clip_concurrency", selected_clip_concurrency
+            )
+
             if params.video_source == "loomloom":
                 _render_loomloom_video_settings(params)
 
@@ -5590,6 +5768,227 @@ def _credential_signature(value: str) -> str:
     return hashlib.sha256(normalized_value.encode("utf-8")).hexdigest()
 
 
+def _get_voxcpm_reference_audio() -> bytes | None:
+    """Return the current session's normalized reference audio, if any."""
+    payload = st.session_state.get(VOXCPM_REFERENCE_AUDIO_SESSION_KEY)
+    if not isinstance(payload, dict):
+        return None
+    audio_bytes = payload.get("audio_bytes")
+    return bytes(audio_bytes) if isinstance(audio_bytes, bytes) else None
+
+
+def _get_voxcpm_reference_audio_digest() -> str:
+    payload = st.session_state.get(VOXCPM_REFERENCE_AUDIO_SESSION_KEY)
+    if not isinstance(payload, dict):
+        return ""
+    digest = payload.get("audio_digest")
+    return str(digest) if isinstance(digest, str) else ""
+
+
+def _get_voxcpm_prompt_audio() -> bytes | None:
+    payload = st.session_state.get(VOXCPM_PROMPT_AUDIO_SESSION_KEY)
+    if not isinstance(payload, dict):
+        return None
+    audio_bytes = payload.get("audio_bytes")
+    return bytes(audio_bytes) if isinstance(audio_bytes, bytes) else None
+
+
+def _get_voxcpm_prompt_audio_digest() -> str:
+    payload = st.session_state.get(VOXCPM_PROMPT_AUDIO_SESSION_KEY)
+    if not isinstance(payload, dict):
+        return ""
+    digest = payload.get("audio_digest")
+    return str(digest) if isinstance(digest, str) else ""
+
+
+def _get_voxcpm_prompt_text() -> str:
+    return str(st.session_state.get(VOXCPM_PROMPT_TEXT_SESSION_KEY, "") or "").strip()
+
+
+def _clear_voxcpm_separate_prompt_audio() -> None:
+    st.session_state.pop("voxcpm_prompt_audio_uploader", None)
+    st.session_state.pop(VOXCPM_PROMPT_AUDIO_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY, None)
+
+
+def _clear_voxcpm_prompt_state() -> None:
+    _clear_voxcpm_separate_prompt_audio()
+    _clear_voxcpm_prompt_transcript()
+    st.session_state.pop(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, None)
+    st.session_state.pop(VOXCPM_PROMPT_EXAMPLE_MODE_SESSION_KEY, None)
+
+
+def _clear_voxcpm_prompt_transcript() -> None:
+    st.session_state.pop(VOXCPM_PROMPT_TEXT_SESSION_KEY, None)
+
+
+def _sync_voxcpm_prompt_example_mode(use_separate_prompt_audio: bool) -> None:
+    """Invalidate the transcript whenever its effective example changes mode."""
+    previous_mode = st.session_state.get(VOXCPM_PROMPT_EXAMPLE_MODE_SESSION_KEY)
+    current_mode = bool(use_separate_prompt_audio)
+    if previous_mode is not None and bool(previous_mode) != current_mode:
+        _clear_voxcpm_prompt_transcript()
+    st.session_state[VOXCPM_PROMPT_EXAMPLE_MODE_SESSION_KEY] = current_mode
+
+
+def _get_voxcpm_effective_prompt_audio() -> bytes | None:
+    if not st.session_state.get(VOXCPM_HIGH_FIDELITY_SESSION_KEY, False):
+        return None
+    if st.session_state.get(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, False):
+        return _get_voxcpm_prompt_audio()
+    return _get_voxcpm_reference_audio()
+
+
+def _get_voxcpm_effective_prompt_audio_digest() -> str:
+    if not st.session_state.get(VOXCPM_HIGH_FIDELITY_SESSION_KEY, False):
+        return ""
+    if st.session_state.get(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, False):
+        return _get_voxcpm_prompt_audio_digest()
+    return _get_voxcpm_reference_audio_digest()
+
+
+def _get_voxcpm_prompt_validation_error() -> str:
+    if not st.session_state.get(VOXCPM_HIGH_FIDELITY_SESSION_KEY, False):
+        return ""
+    upload_error = st.session_state.get(VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY)
+    if upload_error:
+        return str(upload_error)
+    prompt_text = _get_voxcpm_prompt_text()
+    if not prompt_text:
+        return tr("VoxCPM Prompt Text Required")
+    if (
+        st.session_state.get(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, False)
+        and not _get_voxcpm_prompt_audio()
+    ):
+        return tr("VoxCPM Prompt Pair Required")
+    return ""
+
+
+def _get_voxcpm_preview_validation_error(
+    selected_tts_server: str,
+    voice_name: str,
+) -> str:
+    if selected_tts_server != "voxcpm" and not voice.is_voxcpm_voice(voice_name):
+        return ""
+    reference_error = st.session_state.get(VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY)
+    if reference_error:
+        return str(reference_error)
+    return _get_voxcpm_prompt_validation_error()
+
+
+def _sync_voxcpm_reference_audio(uploaded_file) -> bytes | None:
+    """Normalize a new upload once and keep only bounded WAV bytes in session."""
+    if uploaded_file is None:
+        st.session_state.pop(VOXCPM_REFERENCE_AUDIO_SESSION_KEY, None)
+        st.session_state.pop(VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY, None)
+        _clear_voxcpm_prompt_state()
+        st.session_state.pop(VOXCPM_HIGH_FIDELITY_SESSION_KEY, None)
+        return None
+
+    upload_size = int(getattr(uploaded_file, "size", 0) or 0)
+    if upload_size <= 0:
+        st.session_state.pop(VOXCPM_REFERENCE_AUDIO_SESSION_KEY, None)
+        _clear_voxcpm_prompt_state()
+        st.session_state[VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY] = tr(
+            "VoxCPM Reference Audio Empty"
+        )
+        return None
+    if upload_size > voice.VOXCPM_REFERENCE_AUDIO_MAX_UPLOAD_BYTES:
+        st.session_state.pop(VOXCPM_REFERENCE_AUDIO_SESSION_KEY, None)
+        _clear_voxcpm_prompt_state()
+        st.session_state[VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY] = tr(
+            "VoxCPM Reference Audio Upload Too Large"
+        ).format(limit=voice.VOXCPM_REFERENCE_AUDIO_MAX_UPLOAD_BYTES // (1024 * 1024))
+        return None
+
+    previous_digest = _get_voxcpm_reference_audio_digest()
+    raw_audio = uploaded_file.getvalue()
+    upload_digest = hashlib.sha256(raw_audio).hexdigest()
+    cached = st.session_state.get(VOXCPM_REFERENCE_AUDIO_SESSION_KEY)
+    if isinstance(cached, dict) and cached.get("upload_digest") == upload_digest:
+        st.session_state.pop(VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY, None)
+        return _get_voxcpm_reference_audio()
+
+    try:
+        with st.spinner(tr("Validating VoxCPM Reference Audio")):
+            wav_audio = voice.prepare_voxcpm_reference_audio(
+                raw_audio,
+                Path(str(getattr(uploaded_file, "name", ""))).suffix,
+            )
+    except ValueError as exc:
+        # Do not retain a prior clip after the user selects a replacement that
+        # fails validation. Otherwise preview and generation could silently use
+        # a different person's voice than the one currently shown in the UI.
+        st.session_state.pop(VOXCPM_REFERENCE_AUDIO_SESSION_KEY, None)
+        _clear_voxcpm_prompt_state()
+        st.session_state[VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY] = str(exc)
+        return None
+
+    st.session_state[VOXCPM_REFERENCE_AUDIO_SESSION_KEY] = {
+        "upload_digest": upload_digest,
+        "audio_digest": hashlib.sha256(wav_audio).hexdigest(),
+        "audio_bytes": wav_audio,
+    }
+    if (
+        previous_digest != hashlib.sha256(wav_audio).hexdigest()
+        and not st.session_state.get(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, False)
+    ):
+        _clear_voxcpm_prompt_transcript()
+    st.session_state.pop(VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY, None)
+    return bytes(wav_audio)
+
+
+def _sync_voxcpm_prompt_audio(uploaded_file) -> bytes | None:
+    """Normalize the optional delivery example without persisting its content."""
+    if uploaded_file is None:
+        st.session_state.pop(VOXCPM_PROMPT_AUDIO_SESSION_KEY, None)
+        st.session_state.pop(VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY, None)
+        return None
+
+    upload_size = int(getattr(uploaded_file, "size", 0) or 0)
+    if upload_size <= 0:
+        st.session_state.pop(VOXCPM_PROMPT_AUDIO_SESSION_KEY, None)
+        st.session_state[VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY] = tr(
+            "VoxCPM Prompt Audio Empty"
+        )
+        return None
+    if upload_size > voice.VOXCPM_REFERENCE_AUDIO_MAX_UPLOAD_BYTES:
+        st.session_state.pop(VOXCPM_PROMPT_AUDIO_SESSION_KEY, None)
+        st.session_state[VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY] = tr(
+            "VoxCPM Prompt Audio Upload Too Large"
+        ).format(limit=voice.VOXCPM_REFERENCE_AUDIO_MAX_UPLOAD_BYTES // (1024 * 1024))
+        return None
+
+    previous_digest = _get_voxcpm_prompt_audio_digest()
+    raw_audio = uploaded_file.getvalue()
+    upload_digest = hashlib.sha256(raw_audio).hexdigest()
+    cached = st.session_state.get(VOXCPM_PROMPT_AUDIO_SESSION_KEY)
+    if isinstance(cached, dict) and cached.get("upload_digest") == upload_digest:
+        st.session_state.pop(VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY, None)
+        return _get_voxcpm_prompt_audio()
+
+    try:
+        with st.spinner(tr("Validating VoxCPM Prompt Audio")):
+            wav_audio = voice.prepare_voxcpm_reference_audio(
+                raw_audio,
+                Path(str(getattr(uploaded_file, "name", ""))).suffix,
+            )
+    except ValueError as exc:
+        st.session_state.pop(VOXCPM_PROMPT_AUDIO_SESSION_KEY, None)
+        st.session_state[VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY] = str(exc)
+        return None
+
+    st.session_state[VOXCPM_PROMPT_AUDIO_SESSION_KEY] = {
+        "upload_digest": upload_digest,
+        "audio_digest": hashlib.sha256(wav_audio).hexdigest(),
+        "audio_bytes": wav_audio,
+    }
+    if previous_digest != hashlib.sha256(wav_audio).hexdigest():
+        _clear_voxcpm_prompt_transcript()
+    st.session_state.pop(VOXCPM_PROMPT_AUDIO_ERROR_SESSION_KEY, None)
+    return bytes(wav_audio)
+
+
 def _get_voice_preview_provider_signature(tts_server: str) -> dict:
     """
     返回会影响试听结果的非敏感 Provider 配置。
@@ -5643,6 +6042,13 @@ def _get_voice_preview_provider_signature(tts_server: str) -> dict:
             "model_id": config.voxcpm.get("model_id", ""),
             "voice_id": config.voxcpm.get("voice_id", "default"),
             "credential": _credential_signature(config.voxcpm.get("api_key", "")),
+            "reference_audio": _get_voxcpm_reference_audio_digest(),
+            "prompt_audio": _get_voxcpm_effective_prompt_audio_digest(),
+            "prompt_text": _credential_signature(
+                _get_voxcpm_prompt_text()
+                if st.session_state.get(VOXCPM_HIGH_FIDELITY_SESSION_KEY, False)
+                else ""
+            ),
         }
     return {}
 
@@ -5655,6 +6061,9 @@ def _synthesize_voice_preview(
     voice_name: str,
     voice_rate: float,
     voice_volume: float,
+    voxcpm_reference_audio: bytes | None = None,
+    voxcpm_prompt_audio: bytes | None = None,
+    voxcpm_prompt_text: str = "",
 ) -> dict | None:
     """生成一次试听并转为内存缓存，临时文件不会跨会话长期保留。"""
     if selected_tts_server == "chatterbox":
@@ -5673,13 +6082,19 @@ def _synthesize_voice_preview(
         with config.try_runtime_config_lock() as lock_acquired:
             if not lock_acquired:
                 return {"busy": True}
-            sub_maker = voice.tts(
-                text=content,
-                voice_name=voice_name,
-                voice_rate=voice_rate,
-                voice_file=audio_file,
-                voice_volume=voice_volume,
-            )
+            tts_kwargs = {
+                "text": content,
+                "voice_name": voice_name,
+                "voice_rate": voice_rate,
+                "voice_file": audio_file,
+                "voice_volume": voice_volume,
+            }
+            if voxcpm_reference_audio is not None:
+                tts_kwargs["voxcpm_reference_audio"] = voxcpm_reference_audio
+            if voxcpm_prompt_audio is not None:
+                tts_kwargs["voxcpm_prompt_audio"] = voxcpm_prompt_audio
+                tts_kwargs["voxcpm_prompt_text"] = voxcpm_prompt_text
+            sub_maker = voice.tts(**tts_kwargs)
         if not sub_maker or not os.path.exists(audio_file):
             logger.error(f"{preview_type} voice preview did not produce an audio file")
             return None
@@ -5751,12 +6166,17 @@ def _render_voice_preview(params, friendly_names, selected_tts_server, voice_nam
 
     sample_content = _get_voice_preview_sample(voice_name)
     provider_signature = _get_voice_preview_provider_signature(selected_tts_server)
+    preview_validation_error = _get_voxcpm_preview_validation_error(
+        selected_tts_server,
+        voice_name,
+    )
     preview_columns = st.columns(2)
     short_preview_requested = preview_columns[0].button(
         tr("Play Voice"),
         key="play_voice_button",
         icon=":material/graphic_eq:",
         use_container_width=True,
+        disabled=bool(preview_validation_error),
     )
     full_preview_requested = preview_columns[1].button(
         tr("Generate Full Voiceover Preview"),
@@ -5764,7 +6184,7 @@ def _render_voice_preview(params, friendly_names, selected_tts_server, voice_nam
         icon=":material/article:",
         help=tr("Full Voiceover Preview Cost Hint"),
         use_container_width=True,
-        disabled=not bool(script_content),
+        disabled=not bool(script_content) or bool(preview_validation_error),
     )
 
     preview_type = ""
@@ -5817,6 +6237,21 @@ def _render_voice_preview(params, friendly_names, selected_tts_server, voice_nam
                         voice_name=voice_name,
                         voice_rate=params.voice_rate,
                         voice_volume=params.voice_volume,
+                        voxcpm_reference_audio=(
+                            _get_voxcpm_reference_audio()
+                            if selected_tts_server == "voxcpm"
+                            else None
+                        ),
+                        voxcpm_prompt_audio=(
+                            _get_voxcpm_effective_prompt_audio()
+                            if selected_tts_server == "voxcpm"
+                            else None
+                        ),
+                        voxcpm_prompt_text=(
+                            _get_voxcpm_prompt_text()
+                            if selected_tts_server == "voxcpm"
+                            else ""
+                        ),
                     )
             except Exception as exc:
                 logger.exception(f"failed to generate {preview_type} voice preview")
@@ -6877,6 +7312,92 @@ def _render_audio_settings(panel, params):
                     (voxcpm_base_url or DEFAULT_VOXCPM_BASE_URL).strip().rstrip("/"),
                 )
 
+                uploaded_reference_audio = st.file_uploader(
+                    tr("VoxCPM Reference Audio"),
+                    type=list(voice.VOXCPM_REFERENCE_AUDIO_FILE_TYPES),
+                    key="voxcpm_reference_audio_uploader",
+                    help=tr("VoxCPM Reference Audio Help"),
+                )
+                reference_audio = _sync_voxcpm_reference_audio(
+                    uploaded_reference_audio
+                )
+                st.caption(tr("VoxCPM Reference Audio Notice"))
+                reference_audio_error = st.session_state.get(
+                    VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY
+                )
+                if reference_audio_error:
+                    st.error(
+                        tr("VoxCPM Reference Audio Invalid").format(
+                            error=reference_audio_error
+                        )
+                    )
+
+                if reference_audio:
+                    high_fidelity_enabled = st.toggle(
+                        tr("VoxCPM High Fidelity Delivery"),
+                        key=VOXCPM_HIGH_FIDELITY_SESSION_KEY,
+                        help=tr("VoxCPM High Fidelity Delivery Help"),
+                    )
+                    if high_fidelity_enabled:
+                        use_separate_prompt_audio = st.toggle(
+                            tr("VoxCPM Separate Prompt Audio"),
+                            key=VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY,
+                            help=tr("VoxCPM Separate Prompt Audio Help"),
+                        )
+                        _sync_voxcpm_prompt_example_mode(use_separate_prompt_audio)
+                        if use_separate_prompt_audio:
+                            prompt_audio_file = st.file_uploader(
+                                tr("VoxCPM Prompt Audio"),
+                                type=list(voice.VOXCPM_REFERENCE_AUDIO_FILE_TYPES),
+                                key="voxcpm_prompt_audio_uploader",
+                                help=tr("VoxCPM Prompt Audio Help"),
+                            )
+                            _sync_voxcpm_prompt_audio(prompt_audio_file)
+                        else:
+                            _clear_voxcpm_separate_prompt_audio()
+                        effective_prompt_audio = _get_voxcpm_effective_prompt_audio()
+                        if st.button(
+                            tr("Transcribe VoxCPM Prompt Audio"),
+                            key="transcribe_voxcpm_prompt_audio_button",
+                            icon=":material/transcribe:",
+                            help=tr("Transcribe VoxCPM Prompt Audio Help"),
+                            use_container_width=True,
+                            disabled=not bool(effective_prompt_audio),
+                        ):
+                            try:
+                                with st.spinner(tr("Transcribing VoxCPM Prompt Audio")):
+                                    recognized_text = subtitle.transcribe_audio_bytes(
+                                        effective_prompt_audio
+                                    )
+                            except Exception:
+                                logger.exception(
+                                    "failed to transcribe VoxCPM prompt audio"
+                                )
+                                recognized_text = ""
+                            if recognized_text:
+                                st.session_state[VOXCPM_PROMPT_TEXT_SESSION_KEY] = (
+                                    recognized_text
+                                )
+                                st.toast(tr("VoxCPM Prompt Audio Transcribed"))
+                            else:
+                                st.error(tr("VoxCPM Prompt Audio Transcription Failed"))
+                        st.text_area(
+                            tr("VoxCPM Prompt Text"),
+                            key=VOXCPM_PROMPT_TEXT_SESSION_KEY,
+                            help=tr("VoxCPM Prompt Text Help"),
+                            height=100,
+                        )
+                        st.caption(tr("VoxCPM Prompt Transcript Review"))
+                        prompt_error = _get_voxcpm_prompt_validation_error()
+                        if prompt_error:
+                            st.error(
+                                tr("VoxCPM Prompt Invalid").format(
+                                    error=prompt_error
+                                )
+                            )
+                    else:
+                        _clear_voxcpm_prompt_state()
+
             # Chatterbox API settings section (self-hosted, OpenAI-compatible)
             if tts_mode_enabled and (
                 selected_tts_server == "chatterbox"
@@ -7390,6 +7911,30 @@ def _render_subtitle_settings(panel, params):
                 st.toast(tr("Default Subtitle Settings Restored"))
 
 
+def _stage_task_audio(audio_path, audio_bytes):
+    """Publish task-local audio only after the complete write succeeds."""
+    descriptor = None
+    staged_path = None
+    try:
+        descriptor, staged_path = tempfile.mkstemp(
+            dir=os.path.dirname(audio_path), prefix=".task-audio-", suffix=".tmp"
+        )
+        with os.fdopen(descriptor, "wb") as file:
+            descriptor = None  # The file context now owns the descriptor.
+            file.write(audio_bytes)
+        os.replace(staged_path, audio_path)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if staged_path is not None:
+            try:
+                os.unlink(staged_path)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                logger.warning(f"failed to remove staged task audio: {exc}")
+
+
 def _render_generation_controls(
     params, uploaded_files, uploaded_audio_file, uploaded_bgm_file, voice_mode
 ):
@@ -7445,6 +7990,34 @@ def _render_generation_controls(
             _remove_active_generation_task(task_id)
             st.error(tr("Video Script and Subject Cannot Both Be Empty"))
             st.stop()
+
+        voxcpm_reference_audio = None
+        voxcpm_prompt_audio = None
+        voxcpm_prompt_text = ""
+        if voice.is_voxcpm_voice(params.voice_name or ""):
+            reference_audio_error = st.session_state.get(
+                VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY
+            )
+            if reference_audio_error:
+                _remove_active_generation_task(task_id)
+                st.error(
+                    tr("VoxCPM Reference Audio Invalid").format(
+                        error=reference_audio_error
+                    )
+                )
+                st.stop()
+            voxcpm_reference_audio = _get_voxcpm_reference_audio()
+            prompt_validation_error = _get_voxcpm_prompt_validation_error()
+            if prompt_validation_error:
+                _remove_active_generation_task(task_id)
+                st.error(
+                    tr("VoxCPM Prompt Invalid").format(
+                        error=prompt_validation_error
+                    )
+                )
+                st.stop()
+            voxcpm_prompt_audio = _get_voxcpm_effective_prompt_audio()
+            voxcpm_prompt_text = _get_voxcpm_prompt_text()
 
         if params.video_source not in [
             "pexels",
@@ -7668,52 +8241,58 @@ def _render_generation_controls(
             params.bgm_file = ""
 
         if uploaded_audio_file:
-            task_dir = utils.task_dir(task_id)
             try:
+                task_dir = utils.task_dir(task_id)
                 custom_audio_path = _build_uploaded_file_path(
                     uploaded_audio_file,
                     task_dir,
                     CUSTOM_AUDIO_EXTENSIONS,
                     "custom-audio",
                 )
+                # Voiceover uploads previously bypassed the same full-decode
+                # and size checks used for background-music uploads. Validate
+                # before storing or scheduling the generation task.
+                bgm_service.validate_bgm_upload(
+                    uploaded_audio_file.name, uploaded_audio_file
+                )
+                _stage_task_audio(custom_audio_path, uploaded_audio_file.getbuffer())
+            except OSError as exc:
+                _remove_active_generation_task(task_id)
+                logger.error(f"failed to persist uploaded task audio: {exc}")
+                st.error(tr("Video Generation Failed"))
+                st.stop()
+            except bgm_service.BgmUploadError as exc:
+                _remove_active_generation_task(task_id)
+                logger.warning(f"WebUI custom audio upload rejected: {exc}")
+                st.error(str(exc))
+                st.stop()
+            except bgm_service.BgmServiceError as exc:
+                _remove_active_generation_task(task_id)
+                logger.error(f"WebUI custom audio validation failed: {exc}")
+                st.error(str(exc))
+                st.stop()
             except ValueError:
                 _remove_active_generation_task(task_id)
                 st.error(tr("Unsupported Upload File Type"))
                 st.stop()
-            with open(custom_audio_path, "wb") as f:
-                f.write(uploaded_audio_file.getbuffer())
             params.custom_audio_file = custom_audio_path
 
         if uploaded_files:
-            local_videos_dir = utils.storage_dir("local_videos", create=True)
             # 每次重新上传时都以本次选择的素材为准，避免旧素材不断重复追加。
-            params.video_materials = []
-            persisted_local_materials = []
-            for file in uploaded_files:
-                try:
-                    file_path = _build_uploaded_file_path(
-                        file,
-                        local_videos_dir,
-                        LOCAL_MATERIAL_EXTENSIONS,
-                        "material",
-                    )
-                except ValueError:
-                    _remove_active_generation_task(task_id)
-                    st.error(tr("Unsupported Upload File Type"))
-                    st.stop()
-                with open(file_path, "wb") as f:
-                    f.write(file.getbuffer())
-                    m = MaterialInfo()
-                    m.provider = "local"
-                    m.url = file_path
-                    params.video_materials.append(m)
-                    persisted_local_materials.append(
-                        {
-                            "provider": m.provider,
-                            "url": m.url,
-                            "duration": m.duration,
-                        }
-                    )
+            try:
+                params.video_materials, persisted_local_materials = (
+                    _save_uploaded_local_materials(uploaded_files)
+                )
+            except material_upload_service.MaterialUploadError as exc:
+                _remove_active_generation_task(task_id)
+                logger.warning(f"WebUI local material upload rejected: {exc}")
+                st.error(str(exc))
+                st.stop()
+            except material_upload_service.MaterialServiceError as exc:
+                _remove_active_generation_task(task_id)
+                logger.error(f"WebUI local material upload failed: {exc}")
+                st.error(str(exc))
+                st.stop()
             # 将已上传并保存到本地的视频素材写入会话，供后续只改文案时直接复用。
             st.session_state["local_video_materials"] = persisted_local_materials
         elif (
@@ -7737,12 +8316,18 @@ def _render_generation_controls(
             # 试听缓存只存在当前 Streamlit 会话。提交前把音频写入目标任务目录，
             # 后台线程随后只读取任务自己的文件；即使页面 rerun、浏览器关闭或
             # 用户试听其它音色，也不会影响已经入队的生成任务。
-            preview_audio_file = os.path.join(
-                utils.task_dir(task_id),
-                "audio.mp3",
-            )
-            with open(preview_audio_file, "wb") as file:
-                file.write(reusable_voice_preview.pop("audio_bytes"))
+            try:
+                preview_audio_file = os.path.join(
+                    utils.task_dir(task_id),
+                    "audio.mp3",
+                )
+                _stage_task_audio(preview_audio_file, reusable_voice_preview["audio_bytes"])
+            except OSError as exc:
+                _remove_active_generation_task(task_id)
+                logger.error(f"failed to persist preview task audio: {exc}")
+                st.error(tr("Video Generation Failed"))
+                st.stop()
+            reusable_voice_preview.pop("audio_bytes")
             reusable_voice_preview["audio_file"] = preview_audio_file
             logger.info(
                 f"reuse full voice preview for task: "
@@ -7759,6 +8344,9 @@ def _render_generation_controls(
                 capture_logs=not config.ui.get("hide_log", False),
                 voice_preview=reusable_voice_preview,
                 loomloom_video_request=loomloom_video_request,
+                voxcpm_reference_audio=voxcpm_reference_audio,
+                voxcpm_prompt_audio=voxcpm_prompt_audio,
+                voxcpm_prompt_text=voxcpm_prompt_text,
             )
             if loomloom_video_request is not None:
                 # 一个报价只允许提交一次。后台请求自带稳定幂等 ID；提交成功后

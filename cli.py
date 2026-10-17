@@ -241,7 +241,9 @@ def _bgm_type(value: str) -> str:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    command = "mpt cli" if __name__ == "app.cli" else "uv run python cli.py"
     parser = argparse.ArgumentParser(
+        prog="mpt cli" if __name__ == "app.cli" else None,
         description=(
             "Generate MoneyPrinterTurbo videos without the WebUI.\n\n"
             "Provider settings and credentials are read from config.toml.\n"
@@ -295,7 +297,7 @@ Batch manifests:
   storage/resource lookup rules. --stop-at is a batch-wide CLI option. The summary has
   total, succeeded, failed, and tasks keys; every task entry has index, task_id,
   status, result, failed_stage, and error.
-""",
+""".replace("uv run python cli.py", command),
         formatter_class=_CliHelpFormatter,
     )
 
@@ -1489,7 +1491,7 @@ def _validate_cli_files(
         ".flv",
     }
 
-    if params.custom_audio_file:
+    if params.custom_audio_file and stop_at not in {"script", "terms"}:
         params.custom_audio_file = _resolve_cli_file(
             params.custom_audio_file,
             description="custom audio",
@@ -1502,7 +1504,7 @@ def _validate_cli_files(
                 f"allowed extensions: {allowed}"
             )
 
-    if params.bgm_type == "custom":
+    if params.bgm_type == "custom" and stop_at == "video":
         if not bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume):
             # 0 音量时下游会统一跳过所有 BGM。这里同时清空文件参数，避免
             # CLI 为一个不会被读取的文件执行路径解析、存在性检查或格式
@@ -1716,6 +1718,12 @@ def _run_batch_tasks(args: argparse.Namespace, tasks: list[VideoParams]) -> int:
 
 def run_cli(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from app.config import config
+    from app.utils.logging_utils import configure_terminal_logger
+
+    # 配置模块默认把终端日志发往 stdout。CLI 的 stdout 是机器可读 JSON，
+    # 必须在素材预处理等步骤开始前切到 stderr，帮助和参数错误仍保持延迟导入。
+    configure_terminal_logger(sys.stderr, level=config.log_level, colorize=False)
     if args.batch_file:
         try:
             tasks = _build_batch_tasks(args)
@@ -1760,6 +1768,8 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             f"CLI task failed: task_id={task_id}, stop_at={args.stop_at}, "
             f"stage={failed_stage}, error={error}"
         )
+        if result and result.get("videos"):
+            print(json.dumps({"task_id": task_id, "result": result}, ensure_ascii=False))
         return 1
 
     print(json.dumps({"task_id": task_id, "result": result}, ensure_ascii=False))

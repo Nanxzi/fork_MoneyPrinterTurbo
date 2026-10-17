@@ -10,9 +10,9 @@ from contextlib import contextmanager
 import toml
 from loguru import logger
 
-from app import __version__
+from app import __version__, paths
 
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+root_dir = str(paths.runtime_root())
 config_file = f"{root_dir}/config.toml"
 _CONTAINER_CGROUP_MARKERS = ("docker", "containerd", "kubepods", "libpod", "podman")
 _DOCKER_HOST_GATEWAY_NAME = "host.docker.internal"
@@ -240,11 +240,19 @@ def _schedule_deferred_config_flush():
             return
         _pending_config_flush_scheduled = True
 
-    threading.Thread(
-        target=_run_deferred_config_flush,
-        name="mpt-config-flush",
-        daemon=True,
-    ).start()
+    try:
+        threading.Thread(
+            target=_run_deferred_config_flush,
+            name="mpt-config-flush",
+            daemon=True,
+        ).start()
+    except Exception:
+        # No worker owns this reservation when construction/start fails.
+        # Leave queued updates and the save request intact so a later call
+        # can schedule another flush rather than silently waiting forever.
+        with _pending_config_lock:
+            _pending_config_flush_scheduled = False
+        raise
 
 
 def try_save_config():
@@ -375,12 +383,16 @@ def get_container_default_gateway_ip(route_path: str = "/proc/net/route") -> str
 
     for line in route_lines[1:]:
         fields = line.strip().split()
-        if len(fields) < 3:
+        if len(fields) < 8:
             continue
 
         destination = fields[1]
         gateway = fields[2]
-        if destination != "00000000" or gateway == "00000000":
+        if (
+            destination != "00000000"
+            or fields[7] != "00000000"
+            or gateway == "00000000"
+        ):
             continue
 
         try:
@@ -457,16 +469,72 @@ def _load_toml_config(config_path: str):
         raise
 
 
+
+def _initialize_config_from_example(example_file):
+    """Publish a complete first-boot config without replacing another writer."""
+    fd, temp_path = tempfile.mkstemp(
+        prefix=".config-init-", suffix=".toml.tmp",
+        dir=os.path.dirname(os.path.abspath(config_file)),
+    )
+    try:
+        with os.fdopen(fd, "wb") as destination:
+            with open(example_file, "rb") as source:
+                shutil.copyfileobj(source, destination)
+            destination.flush()
+            os.fsync(destination.fileno())
+        try:
+            if os.name == "nt":
+                # Windows rename refuses an existing destination. POSIX rename
+                # overwrites it, so use an exclusive hard-link publication there.
+                os.rename(temp_path, config_file)
+            else:
+                os.link(temp_path, config_file)
+        except FileExistsError:
+            return False
+        except OSError as exc:
+            raise OSError(
+                exc.errno,
+                "cannot safely initialize config.toml; copy config.example.toml "
+                "to config.toml before starting the application",
+            ) from exc
+        return True
+    finally:
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            # A successful Windows rename consumed the temporary path.
+            pass
+
+
 def load_config():
-    # fix: IsADirectoryError: [Errno 21] Is a directory: '/MoneyPrinterTurbo/config.toml'
+    os.makedirs(root_dir, mode=0o700, exist_ok=True)
+    # Docker may create an empty directory when a missing config.toml is bind-mounted.
+    # Only remove that empty placeholder; a nonempty directory may contain user data.
     if os.path.isdir(config_file):
-        shutil.rmtree(config_file)
+        try:
+            os.rmdir(config_file)
+        except FileNotFoundError:
+            # Another initializer already removed this empty bind-mount stub.
+            pass
+        except OSError as exc:
+            # Another initializer may already have replaced the empty Docker
+            # stub with its complete regular file. Accept only that race, not
+            # permission failures or a still-present/nonempty directory.
+            if not (
+                isinstance(exc, NotADirectoryError) and os.path.isfile(config_file)
+            ):
+                raise IsADirectoryError(
+                    f"{config_file} is a directory and cannot be used as the config file; "
+                    "move or rename it, then restart"
+                ) from exc
 
     if not os.path.isfile(config_file):
         example_file = f"{root_dir}/config.example.toml"
+        if not os.path.isfile(example_file):
+            example_file = str(paths.config_template())
         if os.path.isfile(example_file):
-            shutil.copyfile(example_file, config_file)
-            logger.info("copy config.example.toml to config.toml")
+            if _initialize_config_from_example(example_file):
+                logger.info("copy config.example.toml to config.toml")
 
     logger.info(f"load config from file: {config_file}")
 

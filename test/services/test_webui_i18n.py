@@ -13,7 +13,7 @@ WEBUI_MAIN = ROOT_DIR / "webui" / "Main.py"
 I18N_DIR = ROOT_DIR / "webui" / "i18n"
 LLM_PROVIDER_TIPS_PREFIX = "llm_provider_tips."
 TTS_PROVIDER_TIPS_PREFIX = "tts_provider_tips."
-SECONDARY_LOCALES = ("az", "de", "es", "fr", "id", "it", "ko", "pt", "ru", "tr", "vi")
+SECONDARY_LOCALES = ("az", "ca", "de", "es", "fr", "id", "it", "ko", "pt", "ru", "tr", "vi")
 PROVIDER_TIPS_PREFIXES = (
     LLM_PROVIDER_TIPS_PREFIX,
     TTS_PROVIDER_TIPS_PREFIX,
@@ -49,7 +49,28 @@ ENGLISH_FALLBACK_KEYS = frozenset(
         "llm_provider_label.openrouter",
         "llm_provider_label.api_route",
         "llm_provider_label.fluxionai",
+        "llm_provider_label.cheaperinference",
+        "llm_provider_label.requesty",
+        "llm_provider_label.futureinfra",
+        "llm_provider_label.yapi",
+        "llm_provider_label.opper",
+        "llm_provider_label.onomeo",
         "llm_provider_label.shengsuanyun",
+        "llm_provider_label.muse_spark",
+        "llm_provider_label.kimi_code",
+        "kimi_code.oauth.login",
+        "kimi_code.oauth.pending",
+        "kimi_code.oauth.open_page",
+        "kimi_code.oauth.success",
+        "kimi_code.oauth.authorized",
+        "kimi_code.oauth.disconnect",
+        "kimi_code.oauth.expired",
+        "kimi_code.oauth.denied",
+        "kimi_code.oauth.reauth",
+        "kimi_code.oauth.region_mismatch",
+        "kimi_code.oauth.network_error",
+        "kimi_code.oauth.poll_retry",
+        "kimi_code.oauth.changed",
         "LoomLoom Poll Retry Pending",
         "LoomLoom Poll Retry Warning",
         "Resume LoomLoom Status Check",
@@ -106,6 +127,33 @@ ENGLISH_FALLBACK_KEYS = frozenset(
         "Stop Tracking LoomLoom Run Help",
         "Unavailable AI Video Model",
         "VoxCPM Speed Not Supported",
+        "VoxCPM Reference Audio",
+        "VoxCPM Reference Audio Help",
+        "VoxCPM Reference Audio Notice",
+        "VoxCPM Reference Audio Empty",
+        "VoxCPM Reference Audio Upload Too Large",
+        "Validating VoxCPM Reference Audio",
+        "VoxCPM Reference Audio Invalid",
+        "VoxCPM High Fidelity Delivery",
+        "VoxCPM High Fidelity Delivery Help",
+        "VoxCPM Separate Prompt Audio",
+        "VoxCPM Separate Prompt Audio Help",
+        "VoxCPM Prompt Audio",
+        "VoxCPM Prompt Audio Help",
+        "VoxCPM Prompt Text",
+        "VoxCPM Prompt Text Help",
+        "Transcribe VoxCPM Prompt Audio",
+        "Transcribe VoxCPM Prompt Audio Help",
+        "Transcribing VoxCPM Prompt Audio",
+        "VoxCPM Prompt Audio Transcribed",
+        "VoxCPM Prompt Audio Transcription Failed",
+        "VoxCPM Prompt Transcript Review",
+        "VoxCPM Prompt Audio Empty",
+        "VoxCPM Prompt Audio Upload Too Large",
+        "Validating VoxCPM Prompt Audio",
+        "VoxCPM Prompt Text Required",
+        "VoxCPM Prompt Pair Required",
+        "VoxCPM Prompt Invalid",
         "None (Animation)",
     }
 )
@@ -171,6 +219,28 @@ def _markdown_urls(value):
 
 
 class TestWebuiI18n(unittest.TestCase):
+    def test_catalan_locale_is_discovered_and_matches_browser_variants(self):
+        """语言文件自动注册；区域变体回退到 ca，但不覆盖用户已保存的选择。"""
+        locales = utils.load_locales(str(I18N_DIR))
+        self.assertEqual(locales["ca"]["Language"], "Català")
+        for browser_locale in ("ca", "ca-ES", "ca_AD", "CA-es", "ca-ES-valencia"):
+            with self.subTest(browser_locale=browser_locale):
+                self.assertEqual(
+                    utils.resolve_ui_language("", browser_locale, locales), "ca"
+                )
+        self.assertEqual(utils.resolve_ui_language("en", "ca-ES", locales), "en")
+        self.assertEqual(utils.resolve_ui_language("ca", "en-US", locales), "ca")
+
+    def test_catalan_pause_examples_use_supported_syntax(self):
+        """帮助中的停顿标签必须能被解析，不能把关键字翻成不支持的语法。"""
+        help_text = _load_translation("ca")["Video Script Help"]
+        examples = re.findall(r"\[pausa: [^\]]+\]", help_text)
+        self.assertTrue(examples)
+        for example in examples:
+            with self.subTest(example=example):
+                self.assertTrue(utils.has_pause_tags(example))
+                self.assertEqual(utils.remove_pause_tags(example).strip(), "")
+
     def test_saved_ui_language_takes_priority_over_browser_locale(self):
         language = utils.resolve_ui_language(
             saved_language="de",
@@ -298,7 +368,7 @@ class TestWebuiI18n(unittest.TestCase):
                         _markdown_urls(en_translations[key]),
                     )
 
-    def test_script_language_options_include_russian(self):
+    def test_script_language_options_include_russian_and_catalan(self):
         tree = ast.parse(WEBUI_MAIN.read_text(encoding="utf-8"))
         support_locales = None
 
@@ -314,6 +384,7 @@ class TestWebuiI18n(unittest.TestCase):
 
         self.assertIsNotNone(support_locales)
         self.assertIn("ru-RU", support_locales)
+        self.assertIn("ca-ES", support_locales)
 
     def test_locale_files_do_not_redefine_a_translation_key(self):
         """

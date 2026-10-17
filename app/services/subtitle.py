@@ -1,6 +1,7 @@
 import json
 import os.path
-import re
+import tempfile
+import threading
 from timeit import default_timer as timer
 
 try:
@@ -10,21 +11,28 @@ except ImportError:
 from loguru import logger
 
 from app.config import config
+from app.models import const
 from app.utils import utils
+from app.utils.subtitle_reader import file_to_subtitles as file_to_subtitles
+from app.utils.subtitle_writer import write_subtitle_file
 
 model_size = config.whisper.get("model_size", "large-v3")
 device = config.whisper.get("device", "cpu")
 compute_type = config.whisper.get("compute_type", "int8")
 initial_prompt = config.whisper.get("initial_prompt", "") or None
 model = None
+_model_init_lock = threading.Lock()
 
 
-def create(audio_file, subtitle_file: str = "", word_level: bool = False):
+def _ensure_model_loaded() -> bool:
+    """Load the large Whisper model once, even when jobs start concurrently."""
     global model
-    if WhisperModel is None:
-        logger.warning("faster_whisper not available, skipping whisper subtitle generation")
-        return ""
-    if not model:
+    if model is not None:
+        return True
+
+    with _model_init_lock:
+        if model is not None:
+            return True
         model_path = f"{utils.root_dir()}/models/whisper-{model_size}"
         model_bin_file = f"{model_path}/model.bin"
         if not os.path.isdir(model_path) or not os.path.isfile(model_bin_file):
@@ -46,9 +54,24 @@ def create(audio_file, subtitle_file: str = "", word_level: bool = False):
                 f"see [README.md FAQ](https://github.com/harry0703/MoneyPrinterTurbo) for more details.\n"
                 f"********************************************\n\n"
             )
-            return None
+            return False
+    return True
 
-    logger.info(f"start, output file: {subtitle_file}")
+
+def create(
+    audio_file,
+    subtitle_file: str = "",
+    word_level: bool = False,
+    log_details: bool = True,
+):
+    if WhisperModel is None:
+        logger.warning("faster_whisper not available, skipping whisper subtitle generation")
+        return ""
+    if not _ensure_model_loaded():
+        return None
+
+    if log_details:
+        logger.info(f"start, output file: {subtitle_file}")
     if not subtitle_file:
         subtitle_file = f"{audio_file}.srt"
 
@@ -73,15 +96,23 @@ def create(audio_file, subtitle_file: str = "", word_level: bool = False):
         if not seg_text:
             return
 
-        msg = "[%.2fs -> %.2fs] %s" % (seg_start, seg_end, seg_text)
-        logger.debug(msg)
+        if log_details:
+            msg = "[%.2fs -> %.2fs] %s" % (seg_start, seg_end, seg_text)
+            logger.debug(msg)
 
         subtitles.append(
             {"msg": seg_text, "start_time": seg_start, "end_time": seg_end}
         )
 
     for segment in segments:
-        if word_level and segment.words:
+        if not segment.words:
+            # Faster Whisper exposes words as Optional[List[Word]]. A segment
+            # can still have usable text and timestamps when alignment yields
+            # no words; keep that subtitle in both sentence and word modes.
+            recognized(segment.text, segment.start, segment.end)
+            continue
+
+        if word_level:
             for word in segment.words:
                 cleaned_word = word.word.strip()
                 if cleaned_word:
@@ -103,15 +134,13 @@ def create(audio_file, subtitle_file: str = "", word_level: bool = False):
                     is_segmented = True
 
                 seg_end = word.end
-                # If it contains punctuation, then break the sentence.
+                # Accumulate words; only trailing punctuation ends a sentence.
                 seg_text += word.word
 
-                if utils.str_contains_punctuation(word.word):
-                    # remove last char
-                    seg_text = seg_text[:-1]
-                    if not seg_text:
-                        continue
-
+                if word.word.rstrip().endswith(tuple(const.PUNCTUATIONS)):
+                    # Punctuation inside a word (3.14, 1,000, 12:30) is not a
+                    # sentence boundary. Remove only actual trailing delimiters.
+                    seg_text = seg_text.rstrip().rstrip("".join(const.PUNCTUATIONS))
                     recognized(seg_text, seg_start, seg_end)
 
                     is_segmented = False
@@ -146,38 +175,30 @@ def create(audio_file, subtitle_file: str = "", word_level: bool = False):
             idx += 1
 
     sub = "\n".join(lines) + "\n"
-    with open(subtitle_file, "w", encoding="utf-8") as f:
-        f.write(sub)
-    logger.info(f"subtitle file created: {subtitle_file}")
+    if not lines:
+        logger.warning("transcription produced no subtitle cues")
+        return
+    write_subtitle_file(subtitle_file, sub)
+    if log_details:
+        logger.info(f"subtitle file created: {subtitle_file}")
 
 
-def file_to_subtitles(filename):
-    if not filename or not os.path.isfile(filename):
-        return []
+def transcribe_audio_bytes(audio_bytes: bytes) -> str:
+    """Transcribe in-memory WAV audio and remove every temporary artifact."""
+    if not isinstance(audio_bytes, bytes) or not audio_bytes:
+        return ""
 
-    times_texts = []
-    current_times = None
-    current_text = ""
-    index = 0
-    with open(filename, "r", encoding="utf-8") as f:
-        for line in f:
-            times = re.findall("([0-9]*:[0-9]*:[0-9]*,[0-9]*)", line)
-            if times:
-                current_times = line
-            elif line.strip() == "" and current_times:
-                index += 1
-                times_texts.append((index, current_times.strip(), current_text.strip()))
-                current_times, current_text = None, ""
-            elif current_times:
-                current_text += line
+    with tempfile.TemporaryDirectory(prefix="whisper-transcript-") as temp_dir:
+        audio_file = os.path.join(temp_dir, "reference.wav")
+        subtitle_file = os.path.join(temp_dir, "reference.srt")
+        with open(audio_file, "wb") as output:
+            output.write(audio_bytes)
 
-    # Flush the final block. SRT files whose last subtitle is not followed by a
-    # trailing blank line never hit the blank-line branch above, so without this
-    # the last subtitle would be silently dropped.
-    if current_times:
-        index += 1
-        times_texts.append((index, current_times.strip(), current_text.strip()))
-    return times_texts
+        create_result = create(audio_file, subtitle_file, log_details=False)
+        if create_result in (None, "") and not os.path.isfile(subtitle_file):
+            return ""
+        subtitle_items = file_to_subtitles(subtitle_file)
+        return " ".join(item[2].strip() for item in subtitle_items if item[2].strip())
 
 
 def levenshtein_distance(s1, s2):
@@ -292,10 +313,19 @@ def correct(subtitle_file, video_script):
         script_index += 1
         corrected = True
 
+    if subtitle_index < len(subtitle_items):
+        logger.warning(
+            f"Dropping {len(subtitle_items) - subtitle_index} transcription cue(s) "
+            "after the script ends"
+        )
+        corrected = True
+
     if corrected:
-        with open(subtitle_file, "w", encoding="utf-8") as fd:
-            for i, item in enumerate(new_subtitle_items):
-                fd.write(f"{i + 1}\n{item[1]}\n{item[2]}\n\n")
+        content = "".join(
+            f"{i + 1}\n{item[1]}\n{item[2]}\n\n"
+            for i, item in enumerate(new_subtitle_items)
+        )
+        write_subtitle_file(subtitle_file, content)
         logger.info("Subtitle corrected")
     else:
         logger.success("Subtitle is correct")
