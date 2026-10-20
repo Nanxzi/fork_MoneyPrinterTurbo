@@ -15,6 +15,8 @@ from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
 
 import requests
 from loguru import logger
+
+from app.utils.request_logging import trace_http_call
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from PIL import Image, UnidentifiedImageError
 
@@ -356,7 +358,8 @@ def search_videos_pexels(
     logger.info(f"searching videos on pexels: term={search_term!r}")
 
     try:
-        r = requests.get(
+        r = trace_http_call(
+            "GET", requests.get,
             query_url,
             headers=headers,
             proxies=config.proxy,
@@ -466,7 +469,8 @@ def search_videos_pixabay(
     )
 
     try:
-        r = requests.get(
+        r = trace_http_call(
+            "GET", requests.get,
             query_url, proxies=config.proxy, verify=_get_tls_verify(), timeout=(30, 60)
         )
         status_code = int(getattr(r, "status_code", 200))
@@ -625,7 +629,8 @@ def search_videos_coverr(
     logger.info(f"searching videos on coverr: term={search_term!r}")
 
     try:
-        r = requests.get(
+        r = trace_http_call(
+            "GET", requests.get,
             query_url,
             headers=headers,
             proxies=config.proxy,
@@ -845,7 +850,8 @@ def generate_videos_wavespeed(
     # 提交 POST 绝不自动重试：请求可能已经在远端创建了付费任务，重发会造成
     # 重复生成和重复扣费（与官方 SDK 的 submission 策略一致）。
     try:
-        submit_response = requests.post(
+        submit_response = trace_http_call(
+            "POST", requests.post,
             f"{WAVESPEED_API_BASE_URL}/{model_id}",
             json=payload,
             headers=headers,
@@ -872,6 +878,14 @@ def generate_videos_wavespeed(
     try:
         submit_body = submit_response.json()
     except Exception as e:
+        if 400 <= submit_status < 500:
+            # 网关或鉴权层返回的 4xx 可能是纯文本/HTML。4xx 仍是明确拒绝，
+            # 远端没有创建任务，不能误报为“可能已计费”而终止整个任务。
+            logger.error(
+                "wavespeed video generation request rejected: "
+                f"http_status={submit_status}, unreadable body: {type(e).__name__}"
+            )
+            return []
         raise WaveSpeedUnconfirmedTaskError(
             "wavespeed submission returned an unreadable response, the task "
             f"may already exist remotely: error={type(e).__name__}"
@@ -969,7 +983,8 @@ def _wait_for_wavespeed_prediction(
     consecutive_failures = 0
     while True:
         try:
-            response = requests.get(
+            response = trace_http_call(
+                "GET", requests.get,
                 f"{WAVESPEED_API_BASE_URL}/predictions/{prediction_id}/result",
                 headers=headers,
                 proxies=config.proxy,
@@ -1175,7 +1190,8 @@ def save_video(video_url: str, save_dir: str = "") -> str:
             delete=False,
         ) as temp_file:
             temp_path = temp_file.name
-            with requests.get(
+            with trace_http_call(
+                "GET", requests.get,
                 video_url,
                 headers=headers,
                 proxies=config.proxy,
@@ -1408,7 +1424,8 @@ def _openai_image_download_bytes(
     for attempt in range(1, OPENAI_IMAGE_MAX_DOWNLOAD_ATTEMPTS + 1):
         response = None
         try:
-            response = requests.get(
+            response = trace_http_call(
+                "GET", requests.get,
                 image_url,
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -1538,7 +1555,8 @@ def _request_openai_image(endpoint: str, payload: dict) -> tuple[bytes | None, s
             headers["Authorization"] = f"Bearer {api_key}"
         retryable = False
         try:
-            response = requests.post(
+            response = trace_http_call(
+                "POST", requests.post,
                 endpoint,
                 json=payload,
                 headers=headers,
