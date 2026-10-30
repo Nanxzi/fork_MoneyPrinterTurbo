@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import threading
 from typing import Any, Iterable
+import unicodedata
 from uuid import uuid4
 
 from loguru import logger
@@ -311,21 +312,39 @@ def split_string_by_punctuations(s):
             txt += char
             continue
 
-        if char == "." and previous_char.isalpha() and next_char.isalpha():
-            # Edge TTS reads "U.S.", "e.g.", "9 a.m." and "example.com" as one word each.
+        if (
+            char == "."
+            and previous_char.isalpha()
+            and next_char.isalpha()
+            and unicodedata.east_asian_width(previous_char) != "W"
+            and unicodedata.east_asian_width(next_char) != "W"
+        ):
+            # Edge TTS reads "U.S.", "e.g.", "9 a.m." and "example.com" as one word each. Next to a
+            # Chinese, Japanese or Korean character the dot still ends the sentence, as in "很好.我们".
             txt += char
             continue
 
-        if char == ":" and previous_char.isdigit() and next_char.isdigit():
-            # Edge TTS returns a clock time such as "10:30" as one word, so it is no line break.
+        if (
+            char == "."
+            and previous_char.isalpha()
+            and next_char.isdigit()
+            and unicodedata.east_asian_width(previous_char) != "W"
+        ):
+            # Edge TTS usually returns "No.1", "Vol.2" and "Fig.3" as one word. After a Chinese,
+            # Japanese or Korean character the dot still ends the sentence, as in "很好.2025年".
             txt += char
             continue
 
-        if char == "," and previous_char.isdigit() and next_char.isdigit():
-            # 英文数字里的千分位逗号不是断句符，例如 "1,000 years"。
+        if char in (":", "：") and previous_char.isdigit() and next_char.isdigit():
+            # Edge TTS returns a clock time such as "10:30" or "10：30" as one word, so it is no line break.
+            txt += char
+            continue
+
+        if char in (",", "，", "、") and previous_char.isdigit() and next_char.isdigit():
+            # 数字中间的逗号和顿号不是断句符，例如 "1,000 years"、"1，299元"、"第1、2名"。
             # Edge TTS 的 word boundary 通常会把这种数字整体作为连续内容返回；
             # 如果这里拆成 "1" 和 "000 years"，后续字幕聚合会无法匹配脚本原文，
-            # 进而错误回退到 Whisper。
+            # 整段字幕都不会生成。
             txt += char
             continue
 
