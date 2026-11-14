@@ -198,23 +198,23 @@
 
 ## 作者的另一个开源项目：MangoDisk ⭐
 
-<p align="center">
-  <a href="https://mangodisk.app/zh">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/zh/dark-01-deep-cleanup.jpg?ver=1.1.0">
-      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=1.1.0">
-      <img src="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=1.1.0" width="900" alt="MangoDisk 深度清理界面">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <strong>面向 macOS 和 Windows 的开源磁盘清理、空间分析与系统优化工具</strong><br>
+<p align="left">
+  <strong>面向 macOS、Windows 和 Linux 的开源磁盘清理、空间分析与系统优化工具</strong><br>
   一站式清理缓存、大文件、重复文件和应用残留，并提供磁盘空间分析、应用卸载、启动项管理、系统优化与维护
 </p>
 
-<p align="center">
+<p align="left">
   <a href="https://mangodisk.app/zh">访问 MangoDisk 官网</a> · <a href="https://github.com/harry0703/MangoDisk">查看 GitHub 开源项目</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/harry0703/MangoDisk">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/zh/dark-01-deep-cleanup.jpg?ver=2.0.0">
+      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=2.0.0">
+      <img src="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=2.0.0" width="900" alt="MangoDisk 深度清理界面">
+    </picture>
+  </a>
 </p>
 
 ---
@@ -431,6 +431,8 @@ Windows 用户可以参考微软的文档：
 1. [安装 WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install)
 2. [在 WSL 中使用 Docker 容器](https://learn.microsoft.com/zh-cn/windows/wsl/tutorials/wsl-containers)
 
+首次启动前，请先在 `MoneyPrinterTurbo` 目录中将 `config.example.toml` 复制为 `config.toml`，供容器挂载使用；已有配置时请保留原文件。
+
 ```shell
 cd MoneyPrinterTurbo
 docker compose -f docker-compose.release.yml up
@@ -438,7 +440,6 @@ docker compose -f docker-compose.release.yml up
 
 > 默认推荐使用 `docker-compose.release.yml`，它会直接拉取 GitHub Container Registry 上的预构建镜像：`ghcr.io/harry0703/moneyprinterturbo:latest`。
 > 如果你需要本地重新构建镜像，可以继续使用 `docker compose up`。
-> 首次启动前，请将 `config.example.toml` 复制为 `config.toml`，供容器挂载使用。
 
 #### ② 访问 WebUI
 

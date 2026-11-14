@@ -127,23 +127,23 @@
 
 ## 作者によるもう 1 つのオープンソースプロジェクト: MangoDisk ⭐
 
-<p align="center">
-  <a href="https://mangodisk.app/ja">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/ja/dark-01-deep-cleanup.jpg?ver=1.1.0">
-      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/ja/light-01-deep-cleanup.jpg?ver=1.1.0">
-      <img src="https://assets.mangodisk.app/images/screenshots/ja/light-01-deep-cleanup.jpg?ver=1.1.0" width="900" alt="MangoDisk ディープクリーン画面">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <strong>macOS・Windows 向けのオープンソースのディスククリーンアップ、容量分析、システム最適化ツール</strong><br>
+<p align="left">
+  <strong>macOS・Windows・Linux 向けのオープンソースのディスククリーンアップ、容量分析、システム最適化ツール</strong><br>
   キャッシュ、大容量ファイル、重複ファイル、アプリの残骸を整理し、容量分析、アプリのアンインストール、スタートアップ管理、システム最適化・メンテナンスにも対応します。
 </p>
 
-<p align="center">
+<p align="left">
   <a href="https://mangodisk.app/ja">MangoDisk 公式サイト</a> · <a href="https://github.com/harry0703/MangoDisk">GitHub で見る</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/harry0703/MangoDisk">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/ja/dark-01-deep-cleanup.jpg?ver=2.0.0">
+      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/ja/light-01-deep-cleanup.jpg?ver=2.0.0">
+      <img src="https://assets.mangodisk.app/images/screenshots/ja/light-01-deep-cleanup.jpg?ver=2.0.0" width="900" alt="MangoDisk ディープクリーン画面">
+    </picture>
+  </a>
 </p>
 
 ---
@@ -366,6 +366,8 @@ Windows をお使いの場合は、Microsoft のドキュメントを参照し�
 1. [WSL をインストールする](https://learn.microsoft.com/en-us/windows/wsl/install)
 2. [WSL で Docker コンテナを使用する](https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-containers)
 
+初回起動の前に、コンテナにマウントするため `MoneyPrinterTurbo` ディレクトリ内で `config.example.toml` を `config.toml` にコピーしてください。既に `config.toml` がある場合は、そのまま保持してください。
+
 ```shell
 cd MoneyPrinterTurbo
 docker compose -f docker-compose.release.yml up
@@ -373,7 +375,6 @@ docker compose -f docker-compose.release.yml up
 
 > 既定では `docker-compose.release.yml` を推奨します。GitHub Container Registry からビルド済みイメージ `ghcr.io/harry0703/moneyprinterturbo:latest` を取得します。
 > ローカルでイメージをビルドする必要がある場合は、これまでどおり `docker compose up` を実行できます。
-> 初回起動の前に、`config.example.toml` を `config.toml` にコピーしておくと、コンテナにマウントされます。
 
 #### ② WebUI にアクセスする
 

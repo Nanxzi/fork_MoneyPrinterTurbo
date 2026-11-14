@@ -198,23 +198,23 @@ Thanks to [Kimi](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b
 
 ## Another Open-Source Project from the Creator: MangoDisk ⭐
 
-<p align="center">
-  <a href="https://mangodisk.app">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/en/dark-01-deep-cleanup.jpg?ver=1.1.0">
-      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/en/light-01-deep-cleanup.jpg?ver=1.1.0">
-      <img src="https://assets.mangodisk.app/images/screenshots/en/light-01-deep-cleanup.jpg?ver=1.1.0" width="900" alt="MangoDisk Deep Cleanup interface">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <strong>An open-source disk cleaner, storage analyzer, and system optimizer for macOS and Windows</strong><br>
+<p align="left">
+  <strong>An open-source disk cleaner, storage analyzer, and system optimizer for macOS, Windows, and Linux</strong><br>
   Clean caches, large files, duplicates, and app leftovers; analyze disk usage; manage apps and startup items; and maintain your system.
 </p>
 
-<p align="center">
+<p align="left">
   <a href="https://mangodisk.app">Visit the MangoDisk Website</a> · <a href="https://github.com/harry0703/MangoDisk">View on GitHub</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/harry0703/MangoDisk">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/en/dark-01-deep-cleanup.jpg?ver=2.0.0">
+      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/en/light-01-deep-cleanup.jpg?ver=2.0.0">
+      <img src="https://assets.mangodisk.app/images/screenshots/en/light-01-deep-cleanup.jpg?ver=2.0.0" width="900" alt="MangoDisk Deep Cleanup interface">
+    </picture>
+  </a>
 </p>
 
 ---
@@ -439,6 +439,8 @@ If you are using a Windows system, please refer to Microsoft's documentation:
 1. [Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
 2. [Use Docker containers with WSL](https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-containers)
 
+Before the first start, copy `config.example.toml` to `config.toml` in the `MoneyPrinterTurbo` directory for the container mount. Keep your existing `config.toml` if you already have one.
+
 ```shell
 cd MoneyPrinterTurbo
 docker compose -f docker-compose.release.yml up
@@ -446,7 +448,6 @@ docker compose -f docker-compose.release.yml up
 
 > The recommended default is `docker-compose.release.yml`, which pulls the prebuilt image from GitHub Container Registry: `ghcr.io/harry0703/moneyprinterturbo:latest`.
 > If you need to build the image locally, you can still run `docker compose up`.
-> Before the first start, copy `config.example.toml` to `config.toml` so it can be mounted into the containers.
 
 #### ② Access the WebUI
 
